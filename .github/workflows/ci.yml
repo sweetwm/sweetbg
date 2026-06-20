@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  PACMAN_DEPS: >-
+    base-devel git meson ninja pkgconf clang
+    wayland wayland-protocols
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            $PACMAN_DEPS
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - run: ./scripts/format check
+
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            $PACMAN_DEPS
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - run: ./scripts/check
+
+  tidy:
+    name: Clang-Tidy
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            $PACMAN_DEPS
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - run: ./scripts/tidy
+
+  sanitizers:
+    name: Sanitizers
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            $PACMAN_DEPS
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - run: ./scripts/sanitize
+
+  release-check:
+    name: Release Check
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            $PACMAN_DEPS
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - run: meson setup build-release --werror -Dbuildtype=release
+      - run: ninja -C build-release
+      - run: ./build-release/caramel --version
+      - run: ./build-release/carameld --version

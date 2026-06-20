@@ -15,6 +15,18 @@ add_project_arguments(
 	language: 'c',
 )
 
+wayland_client = dependency('wayland-client')
+wayland_protos = dependency('wayland-protocols')
+wayland_scanner_dep = dependency('wayland-scanner', native: true)
+wayland_scanner = find_program(
+	wayland_scanner_dep.get_variable('wayland_scanner'),
+	native: true,
+)
+
+subdir('protocol')
+
+caramel_inc = include_directories('src')
+
 executable(
 	'caramel',
 	'src/caramel.c',
@@ -24,5 +36,8 @@ executable(
 executable(
 	'carameld',
 	'src/carameld.c',
+	'src/wayland/registry.c',
+	include_directories: caramel_inc,
+	dependencies: [wayland_client, caramel_protocols_dep],
 	install: true,
 )

@@ -1,8 +1,35 @@
-// Daemon entry point and lifecycle wiring. Real startup (Wayland connection,
-// socket listener, signal handling, event loop) lands in later slices.
-
 #include <stdio.h>
 #include <string.h>
+#include <wayland-client.h>
+
+#include "wayland/registry.h"
+
+static int run(void) {
+	struct wl_display *display = wl_display_connect(NULL);
+	if (display == NULL) {
+		fprintf(stderr,
+			"carameld: cannot connect to a wayland display; "
+			"is WAYLAND_DISPLAY set?\n");
+		return 1;
+	}
+
+	struct caramel_registry reg;
+	if (!caramel_registry_init(&reg, display)) {
+		caramel_registry_finish(&reg);
+		wl_display_disconnect(display);
+		return 1;
+	}
+
+	printf("carameld: connected; %u output(s), wlr-layer-shell and "
+	       "wl_shm available\n",
+		reg.output_count);
+
+	// No persistent loop yet: tear everything down and exit cleanly so the
+	// slice stays leak-free under valgrind
+	caramel_registry_finish(&reg);
+	wl_display_disconnect(display);
+	return 0;
+}
 
 int main(int argc, char **argv) {
 	if (argc > 1) {
@@ -22,7 +49,5 @@ int main(int argc, char **argv) {
 		return 2;
 	}
 
-	fprintf(stderr,
-		"carameld: the wayland daemon is not implemented yet\n");
-	return 1;
+	return run();
 }

@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <wayland-client.h>
 
+#include "wayland/surface.h"
+
 struct caramel_output {
 	struct wl_list link;
 	struct wl_output *wl_output;
@@ -15,6 +17,7 @@ struct caramel_output {
 	int32_t pixel_height;
 	char *name;
 	char *description;
+	struct caramel_surface surface;
 };
 
 bool caramel_output_create(struct wl_list *outputs,

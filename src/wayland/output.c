@@ -104,6 +104,8 @@ bool caramel_output_create(struct wl_list *outputs,
 
 static void output_destroy(struct caramel_output *output) {
 	wl_list_remove(&output->link);
+	// Tear the layer surface down before its output
+	caramel_surface_destroy(&output->surface);
 	if (output->wl_output != NULL) {
 		wl_output_destroy(output->wl_output);
 	}

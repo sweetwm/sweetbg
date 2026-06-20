@@ -1,13 +1,36 @@
-// Daemon entry point and lifecycle wiring. This slice connects to Wayland and
-// enumerates the compositor's outputs. The socket listener, signal handling,
-// background surfaces, and event loop land next.
-
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <wayland-client.h>
 
 #include "wayland/output.h"
 #include "wayland/registry.h"
+#include "wayland/surface.h"
+
+static bool create_surfaces(struct caramel_registry *reg) {
+	struct caramel_output *output;
+	wl_list_for_each(output, &reg->outputs, link) {
+		if (!caramel_surface_create(&output->surface, reg->compositor,
+			    reg->layer_shell, output->wl_output)) {
+			fprintf(stderr,
+				"carameld: failed to create a layer surface\n");
+			return false;
+		}
+	}
+	return true;
+}
+
+static void report_outputs(struct caramel_registry *reg) {
+	struct caramel_output *output;
+	wl_list_for_each(output, &reg->outputs, link) {
+		printf("  output %s: %dx%d scale %d -> surface %ux%u%s\n",
+			output->name != NULL ? output->name : "(unnamed)",
+			output->pixel_width, output->pixel_height,
+			output->scale, output->surface.width,
+			output->surface.height,
+			output->surface.configured ? "" : " (unconfigured)");
+	}
+}
 
 static int run(void) {
 	struct wl_display *display = wl_display_connect(NULL);
@@ -25,20 +48,18 @@ static int run(void) {
 		return 1;
 	}
 
+	// A second roundtrip delivers the configure for each new surface
+	if (!create_surfaces(&reg) || wl_display_roundtrip(display) < 0) {
+		caramel_registry_finish(&reg);
+		wl_display_disconnect(display);
+		return 1;
+	}
+
 	printf("carameld: connected; %d output(s), wlr-layer-shell and "
 	       "wl_shm available\n",
 		wl_list_length(&reg.outputs));
+	report_outputs(&reg);
 
-	struct caramel_output *output;
-	wl_list_for_each(output, &reg.outputs, link) {
-		printf("  output %s: %dx%d scale %d\n",
-			output->name != NULL ? output->name : "(unnamed)",
-			output->pixel_width, output->pixel_height,
-			output->scale);
-	}
-
-	// No persistent loop yet: tear everything down and exit cleanly so the
-	// slice stays leak-free under valgrind
 	caramel_registry_finish(&reg);
 	wl_display_disconnect(display);
 	return 0;

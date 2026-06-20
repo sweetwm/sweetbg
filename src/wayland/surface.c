@@ -12,8 +12,6 @@ static void handle_configure(void *data,
 	surface->width = width;
 	surface->height = height;
 	surface->configured = true;
-
-	wl_surface_commit(surface->wl_surface);
 }
 
 static void handle_closed(
@@ -67,6 +65,34 @@ bool caramel_surface_create(struct caramel_surface *surface,
 	return true;
 }
 
+bool caramel_surface_paint_color(struct caramel_surface *surface,
+	struct wl_shm *shm, int32_t scale, uint32_t color) {
+	if (!surface->configured || surface->wl_surface == NULL) {
+		return false;
+	}
+	if (scale < 1) {
+		scale = 1;
+	}
+
+	uint32_t pixel_width = surface->width * (uint32_t)scale;
+	uint32_t pixel_height = surface->height * (uint32_t)scale;
+
+	// Release any previous buffer before replacing it
+	caramel_buffer_destroy(&surface->buffer);
+	if (!caramel_buffer_create(
+		    &surface->buffer, shm, pixel_width, pixel_height)) {
+		return false;
+	}
+	caramel_buffer_fill(&surface->buffer, color);
+
+	wl_surface_set_buffer_scale(surface->wl_surface, scale);
+	wl_surface_attach(surface->wl_surface, surface->buffer.wl_buffer, 0, 0);
+	wl_surface_damage_buffer(surface->wl_surface, 0, 0,
+		(int32_t)pixel_width, (int32_t)pixel_height);
+	wl_surface_commit(surface->wl_surface);
+	return true;
+}
+
 void caramel_surface_destroy(struct caramel_surface *surface) {
 	if (surface->layer_surface != NULL) {
 		zwlr_layer_surface_v1_destroy(surface->layer_surface);
@@ -76,5 +102,7 @@ void caramel_surface_destroy(struct caramel_surface *surface) {
 		wl_surface_destroy(surface->wl_surface);
 		surface->wl_surface = NULL;
 	}
+	// Free pixels only after the surface stops referencing the buffer
+	caramel_buffer_destroy(&surface->buffer);
 	surface->configured = false;
 }

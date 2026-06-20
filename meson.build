@@ -12,6 +12,8 @@ project(
 
 add_project_arguments(
 	'-DCARAMEL_VERSION="' + meson.project_version() + '"',
+	# Linux-only daemon; enable memfd_create and the POSIX surface
+	'-D_GNU_SOURCE',
 	language: 'c',
 )
 
@@ -39,6 +41,7 @@ executable(
 	'src/wayland/registry.c',
 	'src/wayland/output.c',
 	'src/wayland/surface.c',
+	'src/wayland/shm.c',
 	include_directories: caramel_inc,
 	dependencies: [wayland_client, caramel_protocols_dep],
 	install: true,

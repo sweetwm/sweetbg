@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <wayland-client.h>
 
+#include "wayland/shm.h"
+
 struct zwlr_layer_shell_v1;
 struct zwlr_layer_surface_v1;
 
@@ -14,13 +16,17 @@ struct caramel_surface {
 	uint32_t width;
 	uint32_t height;
 	bool configured;
+	struct caramel_buffer buffer;
 };
 
 bool caramel_surface_create(struct caramel_surface *surface,
 	struct wl_compositor *compositor,
 	struct zwlr_layer_shell_v1 *layer_shell, struct wl_output *output);
 
-// Destroy the layer surface and wl_surface in protocol order. Idempotent.
+bool caramel_surface_paint_color(struct caramel_surface *surface,
+	struct wl_shm *shm, int32_t scale, uint32_t color);
+
+// Destroy the layer surface, wl_surface, and buffer in order. Idempotent.
 void caramel_surface_destroy(struct caramel_surface *surface);
 
 #endif

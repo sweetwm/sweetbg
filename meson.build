@@ -37,6 +37,7 @@ executable(
 	'carameld',
 	'src/carameld.c',
 	'src/wayland/registry.c',
+	'src/wayland/output.c',
 	include_directories: caramel_inc,
 	dependencies: [wayland_client, caramel_protocols_dep],
 	install: true,

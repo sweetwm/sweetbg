@@ -4,6 +4,7 @@
 #include <string.h>
 #include <wayland-client.h>
 
+#include "wayland/output.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 #define COMPOSITOR_MAX_VERSION 4
@@ -30,15 +31,15 @@ static void handle_global(void *data, struct wl_registry *registry,
 			&zwlr_layer_shell_v1_interface,
 			min_u32(version, LAYER_SHELL_MAX_VERSION));
 	} else if (strcmp(interface, wl_output_interface.name) == 0) {
-		reg->output_count++;
+		caramel_output_create(&reg->outputs, registry, name, version);
 	}
 }
 
 static void handle_global_remove(
 	void *data, struct wl_registry *registry, uint32_t name) {
-	(void)data;
+	struct caramel_registry *reg = data;
 	(void)registry;
-	(void)name;
+	caramel_output_remove(&reg->outputs, name);
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -52,7 +53,7 @@ bool caramel_registry_init(
 	reg->compositor = NULL;
 	reg->shm = NULL;
 	reg->layer_shell = NULL;
-	reg->output_count = 0;
+	wl_list_init(&reg->outputs);
 
 	reg->registry = wl_display_get_registry(display);
 	if (reg->registry == NULL) {
@@ -86,10 +87,20 @@ bool caramel_registry_init(
 		ok = false;
 	}
 
-	return ok;
+	if (!ok) {
+		return false;
+	}
+
+	if (wl_display_roundtrip(display) < 0) {
+		fprintf(stderr, "carameld: wayland roundtrip failed\n");
+		return false;
+	}
+
+	return true;
 }
 
 void caramel_registry_finish(struct caramel_registry *reg) {
+	caramel_outputs_finish(&reg->outputs);
 	if (reg->layer_shell != NULL) {
 		zwlr_layer_shell_v1_destroy(reg->layer_shell);
 		reg->layer_shell = NULL;

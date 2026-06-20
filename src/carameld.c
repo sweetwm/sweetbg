@@ -1,7 +1,12 @@
+// Daemon entry point and lifecycle wiring. This slice connects to Wayland and
+// enumerates the compositor's outputs. The socket listener, signal handling,
+// background surfaces, and event loop land next.
+
 #include <stdio.h>
 #include <string.h>
 #include <wayland-client.h>
 
+#include "wayland/output.h"
 #include "wayland/registry.h"
 
 static int run(void) {
@@ -20,9 +25,17 @@ static int run(void) {
 		return 1;
 	}
 
-	printf("carameld: connected; %u output(s), wlr-layer-shell and "
+	printf("carameld: connected; %d output(s), wlr-layer-shell and "
 	       "wl_shm available\n",
-		reg.output_count);
+		wl_list_length(&reg.outputs));
+
+	struct caramel_output *output;
+	wl_list_for_each(output, &reg.outputs, link) {
+		printf("  output %s: %dx%d scale %d\n",
+			output->name != NULL ? output->name : "(unnamed)",
+			output->pixel_width, output->pixel_height,
+			output->scale);
+	}
 
 	// No persistent loop yet: tear everything down and exit cleanly so the
 	// slice stays leak-free under valgrind

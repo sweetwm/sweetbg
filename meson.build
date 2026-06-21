@@ -29,9 +29,19 @@ subdir('protocol')
 
 caramel_inc = include_directories('src')
 
+# Framing protocol shared by the client and daemon
+ipc_proto = static_library(
+	'caramel-ipc',
+	'src/ipc/protocol.c',
+	include_directories: caramel_inc,
+)
+
 executable(
 	'caramel',
 	'src/caramel.c',
+	'src/ipc/client.c',
+	include_directories: caramel_inc,
+	link_with: ipc_proto,
 	install: true,
 )
 
@@ -42,7 +52,11 @@ executable(
 	'src/wayland/output.c',
 	'src/wayland/surface.c',
 	'src/wayland/shm.c',
+	'src/ipc/server.c',
 	include_directories: caramel_inc,
+	link_with: ipc_proto,
 	dependencies: [wayland_client, caramel_protocols_dep],
 	install: true,
 )
+
+subdir('tests')

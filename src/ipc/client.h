@@ -1,0 +1,9 @@
+#ifndef CARAMEL_IPC_CLIENT_H
+#define CARAMEL_IPC_CLIENT_H
+
+#include <stdint.h>
+
+int caramel_client_request(
+	uint8_t command, const void *payload, uint32_t payload_len);
+
+#endif

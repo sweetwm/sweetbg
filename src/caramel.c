@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "ipc/client.h"
+#include "ipc/protocol.h"
+
 static void usage(FILE *out) {
 	fputs("usage: caramel <command> [args]\n"
 	      "\n"
@@ -36,8 +39,11 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 
-	if (strcmp(cmd, "img") == 0 || strcmp(cmd, "query") == 0 ||
-		strcmp(cmd, "stop") == 0) {
+	if (strcmp(cmd, "stop") == 0) {
+		return caramel_client_request(CARAMEL_CMD_STOP, NULL, 0);
+	}
+
+	if (strcmp(cmd, "img") == 0 || strcmp(cmd, "query") == 0) {
 		fprintf(stderr, "caramel: '%s' is not implemented yet\n", cmd);
 		return 1;
 	}

@@ -1,14 +1,17 @@
-// Daemon entry point and lifecycle wiring. This slice connects to Wayland,
-// enumerates outputs, paints each background surface a solid color, and runs a
-// minimal dispatch loop until signalled. The IPC socket, config, and image
-// decoding land in later slices.
+// Daemon entry point and lifecycle wiring. This slice owns the IPC socket and
+// the Wayland connection, paints each background surface a solid color, and
+// serves client requests from a poll loop until stopped or signalled. Config
+// and image decoding land in later slices.
 
+#include <errno.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <wayland-client.h>
 
+#include "ipc/server.h"
 #include "wayland/output.h"
 #include "wayland/registry.h"
 #include "wayland/surface.h"
@@ -48,19 +51,53 @@ static void paint_surfaces(struct caramel_registry *reg) {
 	}
 }
 
-static void run_loop(struct wl_display *display) {
+static void install_signal_handlers(void) {
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = handle_signal;
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
+}
 
-	// Block on Wayland events; a signal interrupts dispatch and clears the
-	// flag so we tear down cleanly. The IPC fd joins this loop via poll
-	// in a later slice
+// Poll the Wayland and IPC fds together. The prepare_read/read_events dance
+// lets Wayland share a poll with the socket without losing events or spinning
+static void run_loop(
+	struct wl_display *display, struct caramel_ipc_server *ipc) {
+	struct pollfd fds[2];
+	fds[0].fd = wl_display_get_fd(display);
+	fds[0].events = POLLIN;
+	fds[1].fd = ipc->fd;
+	fds[1].events = POLLIN;
+
 	while (g_running) {
-		if (wl_display_dispatch(display) < 0) {
+		while (wl_display_prepare_read(display) != 0) {
+			wl_display_dispatch_pending(display);
+		}
+		wl_display_flush(display);
+
+		if (poll(fds, 2, -1) < 0) {
+			wl_display_cancel_read(display);
+			if (errno == EINTR) {
+				continue;
+			}
 			break;
+		}
+
+		if ((fds[0].revents & POLLIN) != 0) {
+			wl_display_read_events(display);
+		} else {
+			wl_display_cancel_read(display);
+		}
+		if (wl_display_dispatch_pending(display) < 0) {
+			break;
+		}
+
+		if ((fds[1].revents & POLLIN) != 0) {
+			bool stop = false;
+			caramel_ipc_server_handle(ipc, &stop);
+			if (stop) {
+				g_running = 0;
+			}
 		}
 	}
 }
@@ -77,27 +114,18 @@ static void report_outputs(struct caramel_registry *reg) {
 	}
 }
 
-static int run(void) {
-	struct wl_display *display = wl_display_connect(NULL);
-	if (display == NULL) {
-		fprintf(stderr,
-			"carameld: cannot connect to a wayland display; "
-			"is WAYLAND_DISPLAY set?\n");
-		return 1;
-	}
-
+// Connect, paint, and serve. Returns false on a setup failure; `reg` and
+// `display` are already valid when this is called
+static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {
 	struct caramel_registry reg;
 	if (!caramel_registry_init(&reg, display)) {
-		caramel_registry_finish(&reg);
-		wl_display_disconnect(display);
-		return 1;
+		return false;
 	}
 
 	// A second roundtrip delivers the configure for each new surface
 	if (!create_surfaces(&reg) || wl_display_roundtrip(display) < 0) {
 		caramel_registry_finish(&reg);
-		wl_display_disconnect(display);
-		return 1;
+		return false;
 	}
 
 	printf("carameld: connected; %d output(s), wlr-layer-shell and "
@@ -108,15 +136,37 @@ static int run(void) {
 	paint_surfaces(&reg);
 	if (wl_display_roundtrip(display) < 0) {
 		caramel_registry_finish(&reg);
-		wl_display_disconnect(display);
+		return false;
+	}
+
+	run_loop(display, ipc);
+	caramel_registry_finish(&reg);
+	return true;
+}
+
+static int run(void) {
+	// The socket is the singleton guard: a second instance exits here
+	// before touching Wayland
+	struct caramel_ipc_server ipc;
+	if (!caramel_ipc_server_init(&ipc)) {
 		return 1;
 	}
 
-	run_loop(display);
+	struct wl_display *display = wl_display_connect(NULL);
+	if (display == NULL) {
+		fprintf(stderr,
+			"carameld: cannot connect to a wayland display; "
+			"is WAYLAND_DISPLAY set?\n");
+		caramel_ipc_server_finish(&ipc);
+		return 1;
+	}
 
-	caramel_registry_finish(&reg);
+	install_signal_handlers();
+	bool ok = serve(display, &ipc);
+
 	wl_display_disconnect(display);
-	return 0;
+	caramel_ipc_server_finish(&ipc);
+	return ok ? 0 : 1;
 }
 
 int main(int argc, char **argv) {

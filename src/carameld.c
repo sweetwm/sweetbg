@@ -30,9 +30,12 @@ static void handle_signal(int signal_number) {
 	g_running = 0;
 }
 
-static bool create_surfaces(struct caramel_registry *reg) {
+static bool ensure_surfaces(struct caramel_registry *reg) {
 	struct caramel_output *output;
 	wl_list_for_each(output, &reg->outputs, link) {
+		if (output->surface.layer_surface != NULL) {
+			continue;
+		}
 		if (!caramel_surface_create(&output->surface, reg->compositor,
 			    reg->layer_shell, output->wl_output)) {
 			fprintf(stderr,
@@ -43,15 +46,42 @@ static bool create_surfaces(struct caramel_registry *reg) {
 	return true;
 }
 
-static void paint_surfaces(struct caramel_registry *reg) {
+static void reconcile_paint(struct daemon *daemon) {
 	struct caramel_output *output;
-	wl_list_for_each(output, &reg->outputs, link) {
-		if (!caramel_surface_paint_color(&output->surface, reg->shm,
-			    output->scale, DEFAULT_COLOR)) {
-			fprintf(stderr, "carameld: failed to paint output %s\n",
-				output->name != NULL ? output->name
-						     : "(unnamed)");
+	bool any = false;
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		if (output->surface.configured &&
+			output->surface.needs_repaint) {
+			any = true;
+			break;
 		}
+	}
+	if (!any) {
+		return;
+	}
+
+	struct caramel_image image;
+	char err[128];
+	bool have_image = daemon->current_path[0] != '\0' &&
+			  caramel_image_load(&image, daemon->current_path, err,
+				  sizeof(err));
+
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		if (!output->surface.configured ||
+			!output->surface.needs_repaint) {
+			continue;
+		}
+		if (have_image) {
+			caramel_surface_paint_image(&output->surface,
+				daemon->reg->shm, output->scale, &image);
+		} else {
+			caramel_surface_paint_color(&output->surface,
+				daemon->reg->shm, output->scale, DEFAULT_COLOR);
+		}
+	}
+
+	if (have_image) {
+		caramel_image_free(&image);
 	}
 }
 
@@ -75,8 +105,10 @@ static uint8_t handle_img(struct daemon *daemon, const uint8_t *payload,
 
 	struct caramel_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
-		caramel_surface_paint_image(&output->surface, daemon->reg->shm,
-			output->scale, &image);
+		if (output->surface.configured) {
+			caramel_surface_paint_image(&output->surface,
+				daemon->reg->shm, output->scale, &image);
+		}
 	}
 	caramel_image_free(&image);
 
@@ -139,6 +171,9 @@ static void run_loop(struct daemon *daemon, struct caramel_ipc_server *ipc) {
 			break;
 		}
 
+		ensure_surfaces(daemon->reg);
+		reconcile_paint(daemon);
+
 		if ((fds[1].revents & POLLIN) != 0) {
 			bool stop = false;
 			caramel_ipc_server_handle(ipc, dispatch, daemon, &stop);
@@ -168,7 +203,7 @@ static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {
 	}
 
 	// A second roundtrip delivers the configure for each new surface
-	if (!create_surfaces(&reg) || wl_display_roundtrip(display) < 0) {
+	if (!ensure_surfaces(&reg) || wl_display_roundtrip(display) < 0) {
 		caramel_registry_finish(&reg);
 		return false;
 	}
@@ -178,17 +213,19 @@ static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {
 		wl_list_length(&reg.outputs));
 	report_outputs(&reg);
 
-	paint_surfaces(&reg);
-	if (wl_display_roundtrip(display) < 0) {
-		caramel_registry_finish(&reg);
-		return false;
-	}
-
 	struct daemon daemon = {
 		.display = display,
 		.reg = &reg,
 		.current_path = {0},
 	};
+
+	// The initial configures flagged each surface; paint the placeholder
+	reconcile_paint(&daemon);
+	if (wl_display_roundtrip(display) < 0) {
+		caramel_registry_finish(&reg);
+		return false;
+	}
+
 	run_loop(&daemon, ipc);
 	caramel_registry_finish(&reg);
 	return true;

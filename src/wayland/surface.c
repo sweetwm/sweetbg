@@ -9,6 +9,10 @@ static void handle_configure(void *data,
 	uint32_t width, uint32_t height) {
 	struct caramel_surface *surface = data;
 	zwlr_layer_surface_v1_ack_configure(layer_surface, serial);
+
+	if (width != surface->width || height != surface->height) {
+		surface->needs_repaint = true;
+	}
 	surface->width = width;
 	surface->height = height;
 	surface->configured = true;
@@ -35,6 +39,7 @@ bool caramel_surface_create(struct caramel_surface *surface,
 	surface->width = 0;
 	surface->height = 0;
 	surface->configured = false;
+	surface->needs_repaint = false;
 
 	surface->wl_surface = wl_compositor_create_surface(compositor);
 	if (surface->wl_surface == NULL) {
@@ -98,6 +103,7 @@ static void present(struct caramel_surface *surface, int32_t scale,
 	wl_surface_damage_buffer(surface->wl_surface, 0, 0,
 		(int32_t)pixel_width, (int32_t)pixel_height);
 	wl_surface_commit(surface->wl_surface);
+	surface->needs_repaint = false;
 }
 
 bool caramel_surface_paint_color(struct caramel_surface *surface,

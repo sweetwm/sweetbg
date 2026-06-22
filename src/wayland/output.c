@@ -51,7 +51,10 @@ static void handle_scale(
 	void *data, struct wl_output *wl_output, int32_t scale) {
 	struct caramel_output *output = data;
 	(void)wl_output;
-	output->scale = scale;
+	if (scale != output->scale) {
+		output->scale = scale;
+		output->surface.needs_repaint = true;
+	}
 }
 
 static void handle_name(

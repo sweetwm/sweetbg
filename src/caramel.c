@@ -1,11 +1,23 @@
-// CLI entry point and argument routing. The daemon owns all Wayland and
-// wallpaper state; this process parses one command, talks to carameld, exits.
-
+#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "ipc/client.h"
 #include "ipc/protocol.h"
+
+static int cmd_img(const char *arg) {
+	char resolved[PATH_MAX];
+	if (realpath(arg, resolved) == NULL) {
+		fprintf(stderr, "caramel: cannot use '%s': %s\n", arg,
+			strerror(errno));
+		return 1;
+	}
+	return caramel_client_request(
+		CARAMEL_CMD_IMG, resolved, (uint32_t)strlen(resolved));
+}
 
 static void usage(FILE *out) {
 	fputs("usage: caramel <command> [args]\n"
@@ -43,7 +55,15 @@ int main(int argc, char **argv) {
 		return caramel_client_request(CARAMEL_CMD_STOP, NULL, 0);
 	}
 
-	if (strcmp(cmd, "img") == 0 || strcmp(cmd, "query") == 0) {
+	if (strcmp(cmd, "img") == 0) {
+		if (argc < 3) {
+			fprintf(stderr, "usage: caramel img <path>\n");
+			return 2;
+		}
+		return cmd_img(argv[2]);
+	}
+
+	if (strcmp(cmd, "query") == 0) {
 		fprintf(stderr, "caramel: '%s' is not implemented yet\n", cmd);
 		return 1;
 	}

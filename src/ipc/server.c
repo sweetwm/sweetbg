@@ -11,8 +11,6 @@
 
 #include "ipc/protocol.h"
 
-// Bound on how long a single client may take to send its request before the
-// daemon abandons it, so a stalled client cannot freeze wallpaper updates
 #define CLIENT_RECV_TIMEOUT_SECONDS 2
 
 enum socket_state {
@@ -22,8 +20,6 @@ enum socket_state {
 	SOCKET_ERROR,
 };
 
-// Probe an existing socket path by trying to connect: a successful connect
-// means a live daemon, ECONNREFUSED means a stale file, ENOENT means none
 static enum socket_state probe_socket(const struct sockaddr_un *addr) {
 	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (fd < 0) {
@@ -114,25 +110,9 @@ bool caramel_ipc_server_init(struct caramel_ipc_server *server) {
 	return true;
 }
 
-static void dispatch_request(int client, uint8_t type, bool *stop_requested) {
-	switch (type) {
-	case CARAMEL_CMD_STOP:
-		caramel_ipc_send_frame(client, CARAMEL_STATUS_OK, NULL, 0);
-		*stop_requested = true;
-		break;
-	default: {
-		const char *msg = "unknown command";
-		caramel_ipc_send_frame(client,
-			CARAMEL_STATUS_ERR_UNKNOWN_COMMAND, msg,
-			(uint32_t)strlen(msg));
-		break;
-	}
-	}
-}
-
-void caramel_ipc_server_handle(
-	struct caramel_ipc_server *server, bool *stop_requested) {
-	*stop_requested = false;
+void caramel_ipc_server_handle(struct caramel_ipc_server *server,
+	caramel_ipc_dispatch_fn dispatch, void *data, bool *stop) {
+	*stop = false;
 
 	int client = accept4(server->fd, NULL, NULL, SOCK_CLOEXEC);
 	if (client < 0) {
@@ -150,7 +130,11 @@ void caramel_ipc_server_handle(
 	uint32_t len;
 	if (caramel_ipc_recv_frame(
 		    client, &type, payload, &len, sizeof(payload))) {
-		dispatch_request(client, type, stop_requested);
+		char message[256] = {0};
+		uint8_t status = dispatch(data, type, payload, len, message,
+			sizeof(message), stop);
+		caramel_ipc_send_frame(
+			client, status, message, (uint32_t)strlen(message));
 	} else {
 		caramel_ipc_send_frame(
 			client, CARAMEL_STATUS_ERR_BAD_REQUEST, NULL, 0);

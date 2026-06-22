@@ -11,12 +11,14 @@
 
 enum caramel_ipc_command {
 	CARAMEL_CMD_STOP = 1,
+	CARAMEL_CMD_IMG = 2,
 };
 
 enum caramel_ipc_status {
 	CARAMEL_STATUS_OK = 0,
 	CARAMEL_STATUS_ERR_BAD_REQUEST = 1,
 	CARAMEL_STATUS_ERR_UNKNOWN_COMMAND = 2,
+	CARAMEL_STATUS_ERR_IMAGE = 3,
 };
 
 bool caramel_ipc_socket_path(char *out, size_t out_size);

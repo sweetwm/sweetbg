@@ -19,6 +19,8 @@ add_project_arguments(
 
 wayland_client = dependency('wayland-client')
 wayland_protos = dependency('wayland-protocols')
+libpng = dependency('libpng')
+libjpeg = dependency('libjpeg')
 wayland_scanner_dep = dependency('wayland-scanner', native: true)
 wayland_scanner = find_program(
 	wayland_scanner_dep.get_variable('wayland_scanner'),
@@ -53,9 +55,13 @@ executable(
 	'src/wayland/surface.c',
 	'src/wayland/shm.c',
 	'src/ipc/server.c',
+	'src/image/image.c',
+	'src/image/fit.c',
+	'src/image/png.c',
+	'src/image/jpeg.c',
 	include_directories: caramel_inc,
 	link_with: ipc_proto,
-	dependencies: [wayland_client, caramel_protocols_dep],
+	dependencies: [wayland_client, caramel_protocols_dep, libpng, libjpeg],
 	install: true,
 )
 

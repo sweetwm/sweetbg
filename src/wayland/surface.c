@@ -65,8 +65,8 @@ bool caramel_surface_create(struct caramel_surface *surface,
 	return true;
 }
 
-bool caramel_surface_paint_color(struct caramel_surface *surface,
-	struct wl_shm *shm, int32_t scale, uint32_t color) {
+static bool prepare_buffer(struct caramel_surface *surface, struct wl_shm *shm,
+	int32_t scale, uint32_t *pixel_width, uint32_t *pixel_height) {
 	if (!surface->configured || surface->wl_surface == NULL) {
 		return false;
 	}
@@ -74,22 +74,55 @@ bool caramel_surface_paint_color(struct caramel_surface *surface,
 		scale = 1;
 	}
 
-	uint32_t pixel_width = surface->width * (uint32_t)scale;
-	uint32_t pixel_height = surface->height * (uint32_t)scale;
+	uint32_t pw = surface->width * (uint32_t)scale;
+	uint32_t ph = surface->height * (uint32_t)scale;
 
 	// Release any previous buffer before replacing it
 	caramel_buffer_destroy(&surface->buffer);
-	if (!caramel_buffer_create(
-		    &surface->buffer, shm, pixel_width, pixel_height)) {
+	if (!caramel_buffer_create(&surface->buffer, shm, pw, ph)) {
 		return false;
 	}
-	caramel_buffer_fill(&surface->buffer, color);
+	*pixel_width = pw;
+	*pixel_height = ph;
+	return true;
+}
 
+// Attach the freshly filled buffer, damage the whole surface, and commit
+static void present(struct caramel_surface *surface, int32_t scale,
+	uint32_t pixel_width, uint32_t pixel_height) {
+	if (scale < 1) {
+		scale = 1;
+	}
 	wl_surface_set_buffer_scale(surface->wl_surface, scale);
 	wl_surface_attach(surface->wl_surface, surface->buffer.wl_buffer, 0, 0);
 	wl_surface_damage_buffer(surface->wl_surface, 0, 0,
 		(int32_t)pixel_width, (int32_t)pixel_height);
 	wl_surface_commit(surface->wl_surface);
+}
+
+bool caramel_surface_paint_color(struct caramel_surface *surface,
+	struct wl_shm *shm, int32_t scale, uint32_t color) {
+	uint32_t pw;
+	uint32_t ph;
+	if (!prepare_buffer(surface, shm, scale, &pw, &ph)) {
+		return false;
+	}
+	caramel_buffer_fill(&surface->buffer, color);
+	present(surface, scale, pw, ph);
+	return true;
+}
+
+bool caramel_surface_paint_image(struct caramel_surface *surface,
+	struct wl_shm *shm, int32_t scale, const struct caramel_image *image) {
+	uint32_t pw;
+	uint32_t ph;
+	if (!prepare_buffer(surface, shm, scale, &pw, &ph)) {
+		return false;
+	}
+	if (!caramel_image_render_cover(image, pw, ph, surface->buffer.data)) {
+		return false;
+	}
+	present(surface, scale, pw, ph);
 	return true;
 }
 

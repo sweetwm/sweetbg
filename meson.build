@@ -59,6 +59,7 @@ executable(
 	'src/image/fit.c',
 	'src/image/png.c',
 	'src/image/jpeg.c',
+	'src/config/config.c',
 	include_directories: caramel_inc,
 	link_with: ipc_proto,
 	dependencies: [wayland_client, caramel_protocols_dep, libpng, libjpeg],

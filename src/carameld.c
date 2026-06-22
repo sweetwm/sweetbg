@@ -7,6 +7,7 @@
 #include <string.h>
 #include <wayland-client.h>
 
+#include "config/config.h"
 #include "image/image.h"
 #include "ipc/protocol.h"
 #include "ipc/server.h"
@@ -14,12 +15,11 @@
 #include "wayland/registry.h"
 #include "wayland/surface.h"
 
-// Placeholder wallpaper until an image is set: opaque XRGB8888 0x00RRGGBB
-#define DEFAULT_COLOR 0x1e1e2e
-
 struct daemon {
 	struct wl_display *display;
 	struct caramel_registry *reg;
+	// Placeholder color shown when no image is set (XRGB8888 0x00RRGGBB)
+	uint32_t color;
 	char current_path[PATH_MAX];
 };
 
@@ -76,7 +76,7 @@ static void reconcile_paint(struct daemon *daemon) {
 				daemon->reg->shm, output->scale, &image);
 		} else {
 			caramel_surface_paint_color(&output->surface,
-				daemon->reg->shm, output->scale, DEFAULT_COLOR);
+				daemon->reg->shm, output->scale, daemon->color);
 		}
 	}
 
@@ -196,6 +196,28 @@ static void report_outputs(struct caramel_registry *reg) {
 	}
 }
 
+static void apply_config(struct daemon *daemon) {
+	struct caramel_config cfg;
+	char err[256];
+	if (!caramel_config_load(&cfg, err, sizeof(err))) {
+		fprintf(stderr, "carameld: %s\n", err);
+	}
+	daemon->color = cfg.color;
+
+	if (cfg.image[0] == '\0') {
+		return;
+	}
+	struct caramel_image probe;
+	char image_err[128];
+	if (caramel_image_load(
+		    &probe, cfg.image, image_err, sizeof(image_err))) {
+		caramel_image_free(&probe);
+		memcpy(daemon->current_path, cfg.image, strlen(cfg.image) + 1);
+	} else {
+		fprintf(stderr, "carameld: configured image: %s\n", image_err);
+	}
+}
+
 static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {
 	struct caramel_registry reg;
 	if (!caramel_registry_init(&reg, display)) {
@@ -218,8 +240,9 @@ static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {
 		.reg = &reg,
 		.current_path = {0},
 	};
+	apply_config(&daemon);
 
-	// The initial configures flagged each surface; paint the placeholder
+	// The initial configures flagged each surface; paint config image/color
 	reconcile_paint(&daemon);
 	if (wl_display_roundtrip(display) < 0) {
 		caramel_registry_finish(&reg);

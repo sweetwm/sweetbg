@@ -15,3 +15,12 @@ test_image_fit = executable(
 )
 
 test('image cover fit', test_image_fit)
+
+test_config = executable(
+	'test-config',
+	'test_config.c',
+	'../src/config/config.c',
+	include_directories: caramel_inc,
+)
+
+test('config parser', test_config)

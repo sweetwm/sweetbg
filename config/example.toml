@@ -1,0 +1,12 @@
+# Caramel configuration
+# Place this file at $XDG_CONFIG_HOME/caramel/config.toml
+# (or ~/.config/caramel/config.toml). All keys are optional.
+
+# Wallpaper shown at startup. Must be an absolute path to a JPEG or PNG.
+image = "/home/me/Pictures/wallpaper.jpg"
+
+# Placeholder color shown before an image is set, as "#rrggbb".
+color = "#1e1e2e"
+
+# Image fit mode. Only "cover" is supported for now.
+fit = "cover"

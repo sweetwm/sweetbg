@@ -11,7 +11,7 @@ struct caramel_ipc_server {
 };
 
 typedef uint8_t (*caramel_ipc_dispatch_fn)(void *data, uint8_t command,
-	const uint8_t *payload, uint32_t len, char *message,
+	const uint8_t *payload, uint32_t len, int fd, char *message,
 	size_t message_size, bool *stop);
 
 bool caramel_ipc_server_init(struct caramel_ipc_server *server);

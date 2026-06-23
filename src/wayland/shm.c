@@ -1,6 +1,7 @@
 #include "wayland/shm.h"
 
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <wayland-client.h>
 
@@ -84,6 +85,42 @@ bool caramel_buffer_create(struct caramel_buffer *buffer, struct wl_shm *shm,
 
 	wl_buffer_add_listener(buffer->wl_buffer, &buffer_listener, buffer);
 	buffer->data = data;
+	buffer->size = size;
+	return true;
+}
+
+bool caramel_buffer_from_fd(struct caramel_buffer *buffer, struct wl_shm *shm,
+	int fd, uint32_t width, uint32_t height) {
+	buffer->wl_buffer = NULL;
+	buffer->data = NULL;
+	buffer->size = 0;
+	buffer->width = width;
+	buffer->height = height;
+
+	uint32_t stride;
+	size_t size;
+	if (!buffer_size(width, height, &stride, &size)) {
+		return false;
+	}
+
+	struct stat info;
+	if (fstat(fd, &info) != 0 || info.st_size < 0 ||
+		(size_t)info.st_size < size) {
+		return false;
+	}
+
+	struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int32_t)size);
+	if (pool == NULL) {
+		return false;
+	}
+	buffer->wl_buffer = wl_shm_pool_create_buffer(pool, 0, (int32_t)width,
+		(int32_t)height, (int32_t)stride, WL_SHM_FORMAT_XRGB8888);
+	wl_shm_pool_destroy(pool);
+	if (buffer->wl_buffer == NULL) {
+		return false;
+	}
+
+	wl_buffer_add_listener(buffer->wl_buffer, &buffer_listener, buffer);
 	buffer->size = size;
 	return true;
 }

@@ -7,6 +7,18 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+void caramel_put_u32(uint8_t *p, uint32_t value) {
+	p[0] = (uint8_t)(value & 0xff);
+	p[1] = (uint8_t)((value >> 8) & 0xff);
+	p[2] = (uint8_t)((value >> 16) & 0xff);
+	p[3] = (uint8_t)((value >> 24) & 0xff);
+}
+
+uint32_t caramel_get_u32(const uint8_t *p) {
+	return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+	       ((uint32_t)p[3] << 24);
+}
+
 bool caramel_ipc_socket_path(char *out, size_t out_size) {
 	const char *dir = getenv("XDG_RUNTIME_DIR");
 	if (dir == NULL || dir[0] == '\0') {

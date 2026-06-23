@@ -132,6 +132,25 @@ bool caramel_surface_paint_image(struct caramel_surface *surface,
 	return true;
 }
 
+bool caramel_surface_attach_prepared(struct caramel_surface *surface,
+	struct wl_shm *shm, int32_t scale, int fd, uint32_t width,
+	uint32_t height) {
+	if (!surface->configured || surface->wl_surface == NULL) {
+		return false;
+	}
+	if (scale < 1) {
+		scale = 1;
+	}
+
+	// Release any previous buffer before replacing it
+	caramel_buffer_destroy(&surface->buffer);
+	if (!caramel_buffer_from_fd(&surface->buffer, shm, fd, width, height)) {
+		return false;
+	}
+	present(surface, scale, width, height);
+	return true;
+}
+
 void caramel_surface_destroy(struct caramel_surface *surface) {
 	if (surface->layer_surface != NULL) {
 		zwlr_layer_surface_v1_destroy(surface->layer_surface);

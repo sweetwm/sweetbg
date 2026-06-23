@@ -43,8 +43,14 @@ executable(
 	'caramel',
 	'src/caramel.c',
 	'src/ipc/client.c',
+	'src/image/image.c',
+	'src/image/fit.c',
+	'src/image/png.c',
+	'src/image/jpeg.c',
+	'src/image/webp.c',
 	include_directories: caramel_inc,
 	link_with: ipc_proto,
+	dependencies: [libpng, libjpeg, libwebp],
 	install: true,
 )
 

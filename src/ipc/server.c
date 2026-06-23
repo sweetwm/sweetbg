@@ -128,17 +128,23 @@ void caramel_ipc_server_handle(struct caramel_ipc_server *server,
 	uint8_t type;
 	uint8_t payload[CARAMEL_IPC_MAX_PAYLOAD];
 	uint32_t len;
-	if (caramel_ipc_recv_frame(
-		    client, &type, payload, &len, sizeof(payload))) {
+	int fd = -1;
+	if (caramel_ipc_recv_frame_fd(
+		    client, &type, payload, &len, sizeof(payload), &fd)) {
 		// Sized for a multi-output query response, capped by the frame
 		char message[CARAMEL_IPC_MAX_PAYLOAD] = {0};
-		uint8_t status = dispatch(data, type, payload, len, message,
+		uint8_t status = dispatch(data, type, payload, len, fd, message,
 			sizeof(message), stop);
 		caramel_ipc_send_frame(
 			client, status, message, (uint32_t)strlen(message));
 	} else {
 		caramel_ipc_send_frame(
 			client, CARAMEL_STATUS_ERR_BAD_REQUEST, NULL, 0);
+	}
+
+	// Single owner of the received fd: the handler used it during dispatch
+	if (fd >= 0) {
+		close(fd);
 	}
 
 	close(client);

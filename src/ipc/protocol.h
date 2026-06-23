@@ -24,6 +24,9 @@ enum caramel_ipc_status {
 	CARAMEL_STATUS_ERR_IMAGE = 3,
 };
 
+void caramel_put_u32(uint8_t *p, uint32_t value);
+uint32_t caramel_get_u32(const uint8_t *p);
+
 bool caramel_ipc_socket_path(char *out, size_t out_size);
 bool caramel_ipc_read_full(int fd, void *buf, size_t n);
 bool caramel_ipc_write_full(int fd, const void *buf, size_t n);

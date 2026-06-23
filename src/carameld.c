@@ -102,88 +102,87 @@ static void reconcile_paint(struct daemon *daemon) {
 	}
 }
 
-static bool split_img_payload(const uint8_t *payload, uint32_t len, char *path,
-	size_t path_size, char *target, size_t target_size) {
-	const uint8_t *nul = memchr(payload, '\0', len);
-	size_t path_len = nul != NULL ? (size_t)(nul - payload) : (size_t)len;
-	if (path_len == 0 || path_len >= path_size) {
+struct prepared_request {
+	bool is_default;
+	int32_t scale;
+	uint32_t width;
+	uint32_t height;
+	char name[64];
+	char path[PATH_MAX];
+};
+
+static bool parse_prepared(
+	const uint8_t *p, uint32_t len, struct prepared_request *req) {
+	if (len < 20) {
 		return false;
 	}
-	memcpy(path, payload, path_len);
-	path[path_len] = '\0';
+	req->is_default = caramel_get_u32(p) != 0;
+	req->scale = (int32_t)caramel_get_u32(p + 4);
+	req->width = caramel_get_u32(p + 8);
+	req->height = caramel_get_u32(p + 12);
 
-	target[0] = '\0';
-	if (nul != NULL) {
-		size_t target_len = (size_t)len - path_len - 1;
-		if (target_len == 0 || target_len >= target_size ||
-			memchr(nul + 1, '\0', target_len) != NULL) {
-			return false;
-		}
-		memcpy(target, nul + 1, target_len);
-		target[target_len] = '\0';
+	uint32_t name_len = caramel_get_u32(p + 16);
+	size_t off = 20;
+	if (name_len == 0 || name_len >= sizeof(req->name) ||
+		off + name_len > len) {
+		return false;
 	}
+	memcpy(req->name, p + off, name_len);
+	req->name[name_len] = '\0';
+	off += name_len;
+
+	if (off + 4 > len) {
+		return false;
+	}
+	uint32_t path_len = caramel_get_u32(p + off);
+	off += 4;
+	if (path_len == 0 || path_len >= sizeof(req->path) ||
+		off + path_len > len) {
+		return false;
+	}
+	memcpy(req->path, p + off, path_len);
+	req->path[path_len] = '\0';
 	return true;
 }
 
-static uint8_t handle_img(struct daemon *daemon, const uint8_t *payload,
-	uint32_t len, char *message, size_t message_size) {
-	char path[PATH_MAX];
-	char target[64];
-	if (len == 0 || !split_img_payload(payload, len, path, sizeof(path),
-				target, sizeof(target))) {
-		snprintf(message, message_size, "invalid image request");
+static uint8_t handle_img_prepared(struct daemon *daemon,
+	const uint8_t *payload, uint32_t len, int fd, char *message,
+	size_t message_size) {
+	struct prepared_request req;
+	if (fd < 0 || !parse_prepared(payload, len, &req)) {
+		snprintf(message, message_size, "invalid prepared image");
 		return CARAMEL_STATUS_ERR_BAD_REQUEST;
 	}
 
-	// Resolve a named output up front so a typo fails before decoding
-	struct caramel_output *match = NULL;
 	struct caramel_output *output;
-	if (target[0] != '\0') {
-		wl_list_for_each(output, &daemon->reg->outputs, link) {
-			if (output->name != NULL &&
-				strcmp(output->name, target) == 0) {
-				match = output;
-				break;
-			}
-		}
-		if (match == NULL) {
-			snprintf(message, message_size, "no output named %s",
-				target);
-			return CARAMEL_STATUS_ERR_BAD_REQUEST;
+	struct caramel_output *match = NULL;
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		if (output->name != NULL &&
+			strcmp(output->name, req.name) == 0) {
+			match = output;
+			break;
 		}
 	}
+	if (match == NULL) {
+		snprintf(message, message_size, "no output named %s", req.name);
+		return CARAMEL_STATUS_ERR_BAD_REQUEST;
+	}
 
-	struct caramel_image image;
-	char err[128];
-	if (!caramel_image_load(&image, path, err, sizeof(err))) {
-		snprintf(message, message_size, "%s", err);
+	if (!caramel_surface_attach_prepared(&match->surface, daemon->reg->shm,
+		    req.scale, fd, req.width, req.height)) {
+		snprintf(message, message_size, "could not attach buffer");
 		return CARAMEL_STATUS_ERR_IMAGE;
 	}
 
-	if (match != NULL) {
-		memcpy(match->wallpaper_override, path, strlen(path) + 1);
-		if (match->surface.configured) {
-			caramel_surface_paint_image(&match->surface,
-				daemon->reg->shm, match->scale, &image);
-		}
-		snprintf(message, message_size, "applied %s to %s", path,
-			target);
+	// Remember the source so reconfigure/hotplug can recreate it
+	if (req.is_default) {
+		memcpy(daemon->default_path, req.path, strlen(req.path) + 1);
+		match->wallpaper_override[0] = '\0';
 	} else {
-		// No target: this becomes the default and clears overrides
-		memcpy(daemon->default_path, path, strlen(path) + 1);
-		wl_list_for_each(output, &daemon->reg->outputs, link) {
-			output->wallpaper_override[0] = '\0';
-			if (output->surface.configured) {
-				caramel_surface_paint_image(&output->surface,
-					daemon->reg->shm, output->scale,
-					&image);
-			}
-		}
-		snprintf(message, message_size, "applied %s", path);
+		memcpy(match->wallpaper_override, req.path,
+			strlen(req.path) + 1);
 	}
-
-	caramel_image_free(&image);
-	trim_heap();
+	snprintf(message, message_size, "applied %s to %s", req.path, req.name);
 	return CARAMEL_STATUS_OK;
 }
 
@@ -241,17 +240,40 @@ static uint8_t handle_query(
 	return CARAMEL_STATUS_OK;
 }
 
+static uint8_t handle_query_outputs(
+	struct daemon *daemon, char *message, size_t message_size) {
+	size_t off = 0;
+	struct caramel_output *output;
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		if (!output->surface.configured || output->name == NULL) {
+			continue;
+		}
+		uint32_t scale =
+			output->scale > 0 ? (uint32_t)output->scale : 1;
+		append_line(message, message_size, &off, "%s %u %u %u\n",
+			output->name, output->surface.width * scale,
+			output->surface.height * scale, scale);
+	}
+	if (off > 0 && off <= message_size && message[off - 1] == '\n') {
+		message[off - 1] = '\0';
+	}
+	return CARAMEL_STATUS_OK;
+}
+
 static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
-	uint32_t len, char *message, size_t message_size, bool *stop) {
+	uint32_t len, int fd, char *message, size_t message_size, bool *stop) {
 	struct daemon *daemon = data;
 	switch (command) {
 	case CARAMEL_CMD_STOP:
 		*stop = true;
 		return CARAMEL_STATUS_OK;
-	case CARAMEL_CMD_IMG:
-		return handle_img(daemon, payload, len, message, message_size);
 	case CARAMEL_CMD_QUERY:
 		return handle_query(daemon, message, message_size);
+	case CARAMEL_CMD_QUERY_OUTPUTS:
+		return handle_query_outputs(daemon, message, message_size);
+	case CARAMEL_CMD_IMG_PREPARED:
+		return handle_img_prepared(
+			daemon, payload, len, fd, message, message_size);
 	default:
 		snprintf(message, message_size, "unknown command");
 		return CARAMEL_STATUS_ERR_UNKNOWN_COMMAND;

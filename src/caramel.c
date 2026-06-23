@@ -8,7 +8,6 @@
 #include "ipc/client.h"
 #include "ipc/protocol.h"
 
-// Send IMG as "<path>" or, when targeting an output, "<path>\0<output>".
 static int cmd_img(const char *arg, const char *output) {
 	char resolved[PATH_MAX];
 	if (realpath(arg, resolved) == NULL) {
@@ -16,31 +15,11 @@ static int cmd_img(const char *arg, const char *output) {
 			strerror(errno));
 		return 1;
 	}
-
-	size_t path_len = strlen(resolved);
-	if (output == NULL) {
-		return caramel_client_request(
-			CARAMEL_CMD_IMG, resolved, (uint32_t)path_len);
-	}
-
-	size_t output_len = strlen(output);
-	if (output_len == 0 || output_len > 63) {
+	if (output != NULL && (output[0] == '\0' || strlen(output) > 63)) {
 		fprintf(stderr, "caramel: invalid --output name\n");
 		return 2;
 	}
-
-	size_t total = path_len + 1 + output_len;
-	if (total > CARAMEL_IPC_MAX_PAYLOAD) {
-		fprintf(stderr, "caramel: image request too long\n");
-		return 2;
-	}
-
-	char payload[PATH_MAX + 1 + 64];
-	memcpy(payload, resolved, path_len);
-	payload[path_len] = '\0';
-	memcpy(payload + path_len + 1, output, output_len);
-	return caramel_client_request(
-		CARAMEL_CMD_IMG, payload, (uint32_t)total);
+	return caramel_client_set_image(resolved, output);
 }
 
 static int run_img(int argc, char **argv) {

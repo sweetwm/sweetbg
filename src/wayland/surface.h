@@ -31,6 +31,10 @@ bool caramel_surface_paint_color(struct caramel_surface *surface,
 bool caramel_surface_paint_image(struct caramel_surface *surface,
 	struct wl_shm *shm, int32_t scale, const struct caramel_image *image);
 
+bool caramel_surface_attach_prepared(struct caramel_surface *surface,
+	struct wl_shm *shm, int32_t scale, int fd, uint32_t width,
+	uint32_t height);
+
 void caramel_surface_destroy(struct caramel_surface *surface);
 
 #endif

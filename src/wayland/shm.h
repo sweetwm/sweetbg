@@ -21,10 +21,13 @@ struct caramel_buffer {
 bool caramel_buffer_create(struct caramel_buffer *buffer, struct wl_shm *shm,
 	uint32_t width, uint32_t height);
 
-// Fill every pixel with one XRGB8888 color (0x00RRGGBB).
+bool caramel_buffer_from_fd(struct caramel_buffer *buffer, struct wl_shm *shm,
+	int fd, uint32_t width, uint32_t height);
+
+// Fill every pixel with one XRGB8888 color (0x00RRGGBB)
 void caramel_buffer_fill(struct caramel_buffer *buffer, uint32_t color);
 
-// Unmap the pixels and destroy the wl_buffer. Idempotent.
+// Unmap the pixels and destroy the wl_buffer. Idempotent
 void caramel_buffer_destroy(struct caramel_buffer *buffer);
 
 #endif

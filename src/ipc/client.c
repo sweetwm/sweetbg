@@ -187,7 +187,7 @@ static int prepare_memfd(
 	return fd;
 }
 
-static int send_prepared(const struct output_info *out, bool is_default,
+static int send_prepared(const struct output_info *out, uint32_t mode,
 	const char *path, int memfd) {
 	size_t name_len = strlen(out->name);
 	size_t path_len = strlen(path);
@@ -198,7 +198,7 @@ static int send_prepared(const struct output_info *out, bool is_default,
 	}
 
 	uint8_t payload[CARAMEL_IPC_MAX_PAYLOAD];
-	caramel_put_u32(payload, is_default ? 1 : 0);
+	caramel_put_u32(payload, mode);
 	caramel_put_u32(payload + 4, (uint32_t)out->scale);
 	caramel_put_u32(payload + 8, out->width);
 	caramel_put_u32(payload + 12, out->height);
@@ -257,7 +257,8 @@ int caramel_client_set_image(const char *path, const char *output) {
 		return 1;
 	}
 
-	bool is_default = output == NULL;
+	uint32_t mode =
+		output == NULL ? CARAMEL_IMG_DEFAULT : CARAMEL_IMG_OVERRIDE;
 	int rc = 0;
 	int applied = 0;
 	for (int i = 0; i < count; i++) {
@@ -272,7 +273,7 @@ int caramel_client_set_image(const char *path, const char *output) {
 			rc = 1;
 			continue;
 		}
-		if (send_prepared(&outputs[i], is_default, path, memfd) != 0) {
+		if (send_prepared(&outputs[i], mode, path, memfd) != 0) {
 			rc = 1;
 		} else {
 			applied++;
@@ -289,5 +290,41 @@ int caramel_client_set_image(const char *path, const char *output) {
 		printf("applied %s%s%s\n", path, output != NULL ? " to " : "",
 			output != NULL ? output : "");
 	}
+	return rc;
+}
+
+int caramel_client_prepare_output(const char *name, const char *path) {
+	struct output_info outputs[MAX_OUTPUTS];
+	int count = query_outputs(outputs, MAX_OUTPUTS);
+	if (count < 0) {
+		return 1;
+	}
+
+	const struct output_info *target = NULL;
+	for (int i = 0; i < count; i++) {
+		if (strcmp(outputs[i].name, name) == 0) {
+			target = &outputs[i];
+			break;
+		}
+	}
+	if (target == NULL) {
+		// The output went away between spawn and now; nothing to do
+		return 0;
+	}
+
+	struct caramel_image image;
+	char err[128];
+	if (!caramel_image_load(&image, path, err, sizeof(err))) {
+		fprintf(stderr, "caramel: %s\n", err);
+		return 1;
+	}
+
+	int memfd = prepare_memfd(&image, target->width, target->height);
+	int rc = 1;
+	if (memfd >= 0) {
+		rc = send_prepared(target, CARAMEL_IMG_REPAINT, path, memfd);
+		close(memfd);
+	}
+	caramel_image_free(&image);
 	return rc;
 }

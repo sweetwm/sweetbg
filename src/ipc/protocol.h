@@ -24,6 +24,12 @@ enum caramel_ipc_status {
 	CARAMEL_STATUS_ERR_IMAGE = 3,
 };
 
+enum caramel_img_mode {
+	CARAMEL_IMG_DEFAULT = 0,
+	CARAMEL_IMG_OVERRIDE = 1,
+	CARAMEL_IMG_REPAINT = 2,
+};
+
 void caramel_put_u32(uint8_t *p, uint32_t value);
 uint32_t caramel_get_u32(const uint8_t *p);
 

@@ -62,21 +62,10 @@ executable(
 	'src/wayland/surface.c',
 	'src/wayland/shm.c',
 	'src/ipc/server.c',
-	'src/image/image.c',
-	'src/image/fit.c',
-	'src/image/png.c',
-	'src/image/jpeg.c',
-	'src/image/webp.c',
 	'src/config/config.c',
 	include_directories: caramel_inc,
 	link_with: ipc_proto,
-	dependencies: [
-		wayland_client,
-		caramel_protocols_dep,
-		libpng,
-		libjpeg,
-		libwebp,
-	],
+	dependencies: [wayland_client, caramel_protocols_dep],
 	install: true,
 )
 

@@ -96,6 +96,15 @@ int main(int argc, char **argv) {
 		return run_img(argc, argv);
 	}
 
+	if (strcmp(cmd, "prepare") == 0) {
+		if (argc < 4) {
+			fprintf(stderr,
+				"usage: caramel prepare <output> <path>\n");
+			return 2;
+		}
+		return caramel_client_prepare_output(argv[2], argv[3]);
+	}
+
 	if (strcmp(cmd, "query") == 0) {
 		return caramel_client_request(CARAMEL_CMD_QUERY, NULL, 0);
 	}

@@ -118,20 +118,6 @@ bool caramel_surface_paint_color(struct caramel_surface *surface,
 	return true;
 }
 
-bool caramel_surface_paint_image(struct caramel_surface *surface,
-	struct wl_shm *shm, int32_t scale, const struct caramel_image *image) {
-	uint32_t pw;
-	uint32_t ph;
-	if (!prepare_buffer(surface, shm, scale, &pw, &ph)) {
-		return false;
-	}
-	if (!caramel_image_render_cover(image, pw, ph, surface->buffer.data)) {
-		return false;
-	}
-	present(surface, scale, pw, ph);
-	return true;
-}
-
 bool caramel_surface_attach_prepared(struct caramel_surface *surface,
 	struct wl_shm *shm, int32_t scale, int fd, uint32_t width,
 	uint32_t height) {

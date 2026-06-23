@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <wayland-client.h>
 
-#include "image/image.h"
 #include "wayland/shm.h"
 
 struct zwlr_layer_shell_v1;
@@ -27,9 +26,6 @@ bool caramel_surface_create(struct caramel_surface *surface,
 
 bool caramel_surface_paint_color(struct caramel_surface *surface,
 	struct wl_shm *shm, int32_t scale, uint32_t color);
-
-bool caramel_surface_paint_image(struct caramel_surface *surface,
-	struct wl_shm *shm, int32_t scale, const struct caramel_image *image);
 
 bool caramel_surface_attach_prepared(struct caramel_surface *surface,
 	struct wl_shm *shm, int32_t scale, int fd, uint32_t width,

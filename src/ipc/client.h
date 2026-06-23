@@ -8,4 +8,6 @@ int caramel_client_request(
 
 int caramel_client_set_image(const char *path, const char *output);
 
+int caramel_client_prepare_output(const char *name, const char *path);
+
 #endif

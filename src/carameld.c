@@ -6,14 +6,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <wayland-client.h>
 
-#ifdef __GLIBC__
-#include <malloc.h>
-#endif
-
 #include "config/config.h"
-#include "image/image.h"
 #include "ipc/protocol.h"
 #include "ipc/server.h"
 #include "wayland/output.h"
@@ -33,12 +30,6 @@ static volatile sig_atomic_t g_running = 1;
 static void handle_signal(int signal_number) {
 	(void)signal_number;
 	g_running = 0;
-}
-
-static void trim_heap(void) {
-#ifdef __GLIBC__
-	malloc_trim(0);
-#endif
 }
 
 static bool ensure_surfaces(struct caramel_registry *reg) {
@@ -65,45 +56,64 @@ static const char *effective_path(
 	return daemon->default_path;
 }
 
-static bool paint_output(struct daemon *daemon, struct caramel_output *output,
-	const char *path) {
-	if (!output->surface.configured) {
-		return false;
-	}
-	if (path[0] != '\0') {
-		struct caramel_image image;
-		char err[128];
-		if (caramel_image_load(&image, path, err, sizeof(err))) {
-			caramel_surface_paint_image(&output->surface,
-				daemon->reg->shm, output->scale, &image);
-			caramel_image_free(&image);
-			return true;
+static void client_binary(char *out, size_t out_size) {
+	ssize_t n = readlink("/proc/self/exe", out, out_size - 1);
+	if (n > 0 && (size_t)n < out_size) {
+		// NOLINTNEXTLINE(clang-analyzer-security.ArrayBound)
+		out[n] = '\0';
+		char *slash = strrchr(out, '/');
+		if (slash != NULL) {
+			size_t dir_len = (size_t)(slash - out) + 1;
+			const char *bin = "caramel";
+			if (dir_len + strlen(bin) + 1 <= out_size) {
+				memcpy(out + dir_len, bin, strlen(bin) + 1);
+				if (access(out, X_OK) == 0) {
+					return;
+				}
+			}
 		}
-		fprintf(stderr, "carameld: %s\n", err);
 	}
-	caramel_surface_paint_color(&output->surface, daemon->reg->shm,
-		output->scale, daemon->color);
-	return false;
+	snprintf(out, out_size, "caramel");
+}
+
+static void spawn_prepare(const char *name, const char *path) {
+	if (name == NULL) {
+		return;
+	}
+	pid_t pid = fork();
+	if (pid < 0) {
+		fprintf(stderr, "carameld: cannot spawn client: %s\n",
+			strerror(errno));
+		return;
+	}
+	if (pid == 0) {
+		char bin[PATH_MAX];
+		client_binary(bin, sizeof(bin));
+		execlp(bin, "caramel", "prepare", name, path, (char *)NULL);
+		_exit(127);
+	}
 }
 
 static void reconcile_paint(struct daemon *daemon) {
 	struct caramel_output *output;
-	bool decoded = false;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured ||
 			!output->surface.needs_repaint) {
 			continue;
 		}
-		decoded |= paint_output(
-			daemon, output, effective_path(daemon, output));
-	}
-	if (decoded) {
-		trim_heap();
+		const char *path = effective_path(daemon, output);
+		if (path[0] == '\0') {
+			caramel_surface_paint_color(&output->surface,
+				daemon->reg->shm, output->scale, daemon->color);
+		} else {
+			output->surface.needs_repaint = false;
+			spawn_prepare(output->name, path);
+		}
 	}
 }
 
 struct prepared_request {
-	bool is_default;
+	uint32_t mode;
 	int32_t scale;
 	uint32_t width;
 	uint32_t height;
@@ -116,7 +126,7 @@ static bool parse_prepared(
 	if (len < 20) {
 		return false;
 	}
-	req->is_default = caramel_get_u32(p) != 0;
+	req->mode = caramel_get_u32(p);
 	req->scale = (int32_t)caramel_get_u32(p + 4);
 	req->width = caramel_get_u32(p + 8);
 	req->height = caramel_get_u32(p + 12);
@@ -174,11 +184,11 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 		return CARAMEL_STATUS_ERR_IMAGE;
 	}
 
-	// Remember the source so reconfigure/hotplug can recreate it
-	if (req.is_default) {
+	// Update remembered assignments unless this is a daemon-driven repaint
+	if (req.mode == CARAMEL_IMG_DEFAULT) {
 		memcpy(daemon->default_path, req.path, strlen(req.path) + 1);
 		match->wallpaper_override[0] = '\0';
-	} else {
+	} else if (req.mode == CARAMEL_IMG_OVERRIDE) {
 		memcpy(match->wallpaper_override, req.path,
 			strlen(req.path) + 1);
 	}
@@ -286,6 +296,12 @@ static void install_signal_handlers(void) {
 	sa.sa_handler = handle_signal;
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
+
+	// Auto-reap the short-lived `caramel prepare` children we spawn
+	struct sigaction chld;
+	memset(&chld, 0, sizeof(chld));
+	chld.sa_handler = SIG_IGN;
+	sigaction(SIGCHLD, &chld, NULL);
 }
 
 static void run_loop(struct daemon *daemon, struct caramel_ipc_server *ipc) {
@@ -355,15 +371,14 @@ static void apply_config(struct daemon *daemon) {
 	if (cfg.image[0] == '\0') {
 		return;
 	}
-	struct caramel_image probe;
-	char image_err[128];
-	if (caramel_image_load(
-		    &probe, cfg.image, image_err, sizeof(image_err))) {
-		caramel_image_free(&probe);
-		memcpy(daemon->default_path, cfg.image, strlen(cfg.image) + 1);
-	} else {
-		fprintf(stderr, "carameld: configured image: %s\n", image_err);
+	// The daemon does not decode; just check the file is readable here and
+	// let the spawned client report any decode error when it runs
+	if (access(cfg.image, R_OK) != 0) {
+		fprintf(stderr, "carameld: configured image %s: %s\n",
+			cfg.image, strerror(errno));
+		return;
 	}
+	memcpy(daemon->default_path, cfg.image, strlen(cfg.image) + 1);
 }
 
 static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {

@@ -21,6 +21,7 @@ wayland_client = dependency('wayland-client')
 wayland_protos = dependency('wayland-protocols')
 libpng = dependency('libpng')
 libjpeg = dependency('libjpeg')
+libwebp = dependency('libwebp')
 wayland_scanner_dep = dependency('wayland-scanner', native: true)
 wayland_scanner = find_program(
 	wayland_scanner_dep.get_variable('wayland_scanner'),
@@ -59,10 +60,17 @@ executable(
 	'src/image/fit.c',
 	'src/image/png.c',
 	'src/image/jpeg.c',
+	'src/image/webp.c',
 	'src/config/config.c',
 	include_directories: caramel_inc,
 	link_with: ipc_proto,
-	dependencies: [wayland_client, caramel_protocols_dep, libpng, libjpeg],
+	dependencies: [
+		wayland_client,
+		caramel_protocols_dep,
+		libpng,
+		libjpeg,
+		libwebp,
+	],
 	install: true,
 )
 

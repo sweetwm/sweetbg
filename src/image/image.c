@@ -29,6 +29,12 @@ static bool is_jpeg(const uint8_t *sig, size_t n) {
 	return n >= 3 && sig[0] == 0xff && sig[1] == 0xd8 && sig[2] == 0xff;
 }
 
+// WebP is a RIFF container: "RIFF" then 4 size bytes then "WEBP"
+static bool is_webp(const uint8_t *sig, size_t n) {
+	return n >= 12 && memcmp(sig, "RIFF", 4) == 0 &&
+	       memcmp(sig + 8, "WEBP", 4) == 0;
+}
+
 bool caramel_image_load(struct caramel_image *img, const char *path, char *err,
 	size_t err_size) {
 	img->width = 0;
@@ -41,7 +47,7 @@ bool caramel_image_load(struct caramel_image *img, const char *path, char *err,
 		return false;
 	}
 
-	uint8_t sig[8];
+	uint8_t sig[12];
 	size_t got = fread(sig, 1, sizeof(sig), fp);
 	if (fseek(fp, 0, SEEK_SET) != 0) {
 		snprintf(err, err_size, "cannot read image");
@@ -54,6 +60,8 @@ bool caramel_image_load(struct caramel_image *img, const char *path, char *err,
 		ok = caramel_decode_png(fp, img, err, err_size);
 	} else if (is_jpeg(sig, got)) {
 		ok = caramel_decode_jpeg(fp, img, err, err_size);
+	} else if (is_webp(sig, got)) {
+		ok = caramel_decode_webp(fp, img, err, err_size);
 	} else {
 		snprintf(err, err_size, "unsupported image format");
 		ok = false;

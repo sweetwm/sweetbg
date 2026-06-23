@@ -13,5 +13,7 @@ bool caramel_decode_png(
 	FILE *fp, struct caramel_image *img, char *err, size_t err_size);
 bool caramel_decode_jpeg(
 	FILE *fp, struct caramel_image *img, char *err, size_t err_size);
+bool caramel_decode_webp(
+	FILE *fp, struct caramel_image *img, char *err, size_t err_size);
 
 #endif

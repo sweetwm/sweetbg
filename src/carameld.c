@@ -8,6 +8,10 @@
 #include <string.h>
 #include <wayland-client.h>
 
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
+
 #include "config/config.h"
 #include "image/image.h"
 #include "ipc/protocol.h"
@@ -29,6 +33,12 @@ static volatile sig_atomic_t g_running = 1;
 static void handle_signal(int signal_number) {
 	(void)signal_number;
 	g_running = 0;
+}
+
+static void trim_heap(void) {
+#ifdef __GLIBC__
+	malloc_trim(0);
+#endif
 }
 
 static bool ensure_surfaces(struct caramel_registry *reg) {
@@ -83,6 +93,7 @@ static void reconcile_paint(struct daemon *daemon) {
 
 	if (have_image) {
 		caramel_image_free(&image);
+		trim_heap();
 	}
 }
 
@@ -112,6 +123,7 @@ static uint8_t handle_img(struct daemon *daemon, const uint8_t *payload,
 		}
 	}
 	caramel_image_free(&image);
+	trim_heap();
 
 	memcpy(daemon->current_path, path, (size_t)len + 1);
 	snprintf(message, message_size, "applied %s", path);

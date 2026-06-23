@@ -74,4 +74,5 @@ executable(
 	install: true,
 )
 
+subdir('doc')
 subdir('tests')

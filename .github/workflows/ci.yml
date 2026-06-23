@@ -8,7 +8,7 @@ on:
 env:
   PACMAN_DEPS: >-
     base-devel git meson ninja pkgconf clang
-    wayland wayland-protocols libpng libjpeg-turbo libwebp
+    wayland wayland-protocols libpng libjpeg-turbo libwebp scdoc
 
 jobs:
   format:

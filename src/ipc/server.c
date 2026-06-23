@@ -130,7 +130,8 @@ void caramel_ipc_server_handle(struct caramel_ipc_server *server,
 	uint32_t len;
 	if (caramel_ipc_recv_frame(
 		    client, &type, payload, &len, sizeof(payload))) {
-		char message[256] = {0};
+		// Sized for a multi-output query response, capped by the frame
+		char message[CARAMEL_IPC_MAX_PAYLOAD] = {0};
 		uint8_t status = dispatch(data, type, payload, len, message,
 			sizeof(message), stop);
 		caramel_ipc_send_frame(

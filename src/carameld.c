@@ -2,6 +2,7 @@
 #include <limits.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -117,6 +118,51 @@ static uint8_t handle_img(struct daemon *daemon, const uint8_t *payload,
 	return CARAMEL_STATUS_OK;
 }
 
+__attribute__((format(printf, 4, 5))) static void append_line(
+	char *out, size_t out_size, size_t *off, const char *fmt, ...) {
+	if (*off >= out_size) {
+		return;
+	}
+	va_list ap;
+	va_start(ap, fmt);
+	int n = vsnprintf(out + *off, out_size - *off, fmt, ap);
+	va_end(ap);
+	if (n < 0) {
+		return;
+	}
+	if ((size_t)n >= out_size - *off) {
+		*off = out_size;
+	} else {
+		*off += (size_t)n;
+	}
+}
+
+static uint8_t handle_query(
+	struct daemon *daemon, char *message, size_t message_size) {
+	size_t off = 0;
+	if (daemon->current_path[0] != '\0') {
+		append_line(message, message_size, &off, "image: %s\n",
+			daemon->current_path);
+	} else {
+		append_line(message, message_size, &off, "color: #%06x\n",
+			daemon->color & 0xffffffu);
+	}
+
+	struct caramel_output *output;
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		append_line(message, message_size, &off, "%s: %dx%d scale %d\n",
+			output->name != NULL ? output->name : "(unnamed)",
+			output->pixel_width, output->pixel_height,
+			output->scale);
+	}
+
+	// Drop the trailing newline; the client prints its own
+	if (off > 0 && off <= message_size && message[off - 1] == '\n') {
+		message[off - 1] = '\0';
+	}
+	return CARAMEL_STATUS_OK;
+}
+
 static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 	uint32_t len, char *message, size_t message_size, bool *stop) {
 	struct daemon *daemon = data;
@@ -126,6 +172,8 @@ static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 		return CARAMEL_STATUS_OK;
 	case CARAMEL_CMD_IMG:
 		return handle_img(daemon, payload, len, message, message_size);
+	case CARAMEL_CMD_QUERY:
+		return handle_query(daemon, message, message_size);
 	default:
 		snprintf(message, message_size, "unknown command");
 		return CARAMEL_STATUS_ERR_UNKNOWN_COMMAND;

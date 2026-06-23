@@ -64,8 +64,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (strcmp(cmd, "query") == 0) {
-		fprintf(stderr, "caramel: '%s' is not implemented yet\n", cmd);
-		return 1;
+		return caramel_client_request(CARAMEL_CMD_QUERY, NULL, 0);
 	}
 
 	fprintf(stderr, "caramel: unknown command '%s'\n", cmd);

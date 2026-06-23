@@ -12,6 +12,7 @@
 enum caramel_ipc_command {
 	CARAMEL_CMD_STOP = 1,
 	CARAMEL_CMD_IMG = 2,
+	CARAMEL_CMD_QUERY = 3,
 };
 
 enum caramel_ipc_status {

@@ -13,6 +13,8 @@ enum caramel_ipc_command {
 	CARAMEL_CMD_STOP = 1,
 	CARAMEL_CMD_IMG = 2,
 	CARAMEL_CMD_QUERY = 3,
+	CARAMEL_CMD_QUERY_OUTPUTS = 4,
+	CARAMEL_CMD_IMG_PREPARED = 5,
 };
 
 enum caramel_ipc_status {
@@ -29,5 +31,10 @@ bool caramel_ipc_send_frame(
 	int fd, uint8_t type, const void *payload, uint32_t len);
 bool caramel_ipc_recv_frame(
 	int fd, uint8_t *type, void *payload, uint32_t *len, uint32_t max);
+
+bool caramel_ipc_send_frame_fd(
+	int fd, uint8_t type, const void *payload, uint32_t len, int pass_fd);
+bool caramel_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
+	uint32_t *len, uint32_t max, int *out_fd);
 
 #endif

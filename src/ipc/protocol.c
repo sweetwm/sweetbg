@@ -3,7 +3,9 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 bool caramel_ipc_socket_path(char *out, size_t out_size) {
 	const char *dir = getenv("XDG_RUNTIME_DIR");
@@ -100,4 +102,137 @@ bool caramel_ipc_recv_frame(
 	*type = header[1];
 	*len = plen;
 	return true;
+}
+
+static void fill_header(uint8_t *header, uint8_t type, uint32_t len) {
+	header[0] = CARAMEL_IPC_VERSION;
+	header[1] = type;
+	header[2] = 0;
+	header[3] = 0;
+	header[4] = (uint8_t)(len & 0xff);
+	header[5] = (uint8_t)((len >> 8) & 0xff);
+	header[6] = (uint8_t)((len >> 16) & 0xff);
+	header[7] = (uint8_t)((len >> 24) & 0xff);
+}
+
+bool caramel_ipc_send_frame_fd(
+	int fd, uint8_t type, const void *payload, uint32_t len, int pass_fd) {
+	if (len > CARAMEL_IPC_MAX_PAYLOAD) {
+		return false;
+	}
+
+	uint8_t buffer[CARAMEL_IPC_HEADER_SIZE + CARAMEL_IPC_MAX_PAYLOAD];
+	fill_header(buffer, type, len);
+	if (len > 0) {
+		memcpy(buffer + CARAMEL_IPC_HEADER_SIZE, payload, len);
+	}
+	size_t total = (size_t)CARAMEL_IPC_HEADER_SIZE + len;
+
+	struct iovec iov = {.iov_base = buffer, .iov_len = total};
+	struct msghdr msg;
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	union {
+		char bytes[CMSG_SPACE(sizeof(int))];
+		struct cmsghdr align;
+	} control;
+	if (pass_fd >= 0) {
+		memset(&control, 0, sizeof(control));
+		msg.msg_control = control.bytes;
+		msg.msg_controllen = sizeof(control.bytes);
+		struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+		cmsg->cmsg_level = SOL_SOCKET;
+		cmsg->cmsg_type = SCM_RIGHTS;
+		cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+		memcpy(CMSG_DATA(cmsg), &pass_fd, sizeof(int));
+	}
+
+	ssize_t sent;
+	do {
+		sent = sendmsg(fd, &msg, MSG_NOSIGNAL);
+	} while (sent < 0 && errno == EINTR);
+	if (sent <= 0) {
+		return false;
+	}
+
+	if ((size_t)sent < total) {
+		return caramel_ipc_write_full(
+			fd, buffer + sent, total - (size_t)sent);
+	}
+	return true;
+}
+
+bool caramel_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
+	uint32_t *len, uint32_t max, int *out_fd) {
+	*out_fd = -1;
+
+	uint8_t header[CARAMEL_IPC_HEADER_SIZE];
+	struct iovec iov = {.iov_base = header, .iov_len = sizeof(header)};
+	struct msghdr msg;
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	union {
+		char bytes[CMSG_SPACE(sizeof(int))];
+		struct cmsghdr align;
+	} control;
+	memset(&control, 0, sizeof(control));
+	msg.msg_control = control.bytes;
+	msg.msg_controllen = sizeof(control.bytes);
+
+	ssize_t got;
+	do {
+		got = recvmsg(fd, &msg, 0);
+	} while (got < 0 && errno == EINTR);
+	if (got <= 0) {
+		return false;
+	}
+
+	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+	if (cmsg != NULL && cmsg->cmsg_level == SOL_SOCKET &&
+		cmsg->cmsg_type == SCM_RIGHTS &&
+		cmsg->cmsg_len == CMSG_LEN(sizeof(int))) {
+		memcpy(out_fd, CMSG_DATA(cmsg), sizeof(int));
+	}
+	// A truncated control message could leave a dangling fd in the kernel
+	if ((msg.msg_flags & MSG_CTRUNC) != 0) {
+		if (*out_fd >= 0) {
+			close(*out_fd);
+			*out_fd = -1;
+		}
+		return false;
+	}
+
+	if ((size_t)got < sizeof(header) &&
+		!caramel_ipc_read_full(
+			fd, header + got, sizeof(header) - (size_t)got)) {
+		goto fail;
+	}
+	if (header[0] != CARAMEL_IPC_VERSION) {
+		goto fail;
+	}
+
+	uint32_t plen = (uint32_t)header[4] | ((uint32_t)header[5] << 8) |
+			((uint32_t)header[6] << 16) |
+			((uint32_t)header[7] << 24);
+	if (plen > max || plen > CARAMEL_IPC_MAX_PAYLOAD) {
+		goto fail;
+	}
+	if (plen > 0 && !caramel_ipc_read_full(fd, payload, plen)) {
+		goto fail;
+	}
+
+	*type = header[1];
+	*len = plen;
+	return true;
+
+fail:
+	if (*out_fd >= 0) {
+		close(*out_fd);
+		*out_fd = -1;
+	}
+	return false;
 }

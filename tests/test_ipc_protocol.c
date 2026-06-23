@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -106,6 +107,59 @@ static int test_recv_rejects_oversize_length(void) {
 	return 0;
 }
 
+static int test_fd_passing(void) {
+	int sv[2];
+	CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
+
+	int memfd = memfd_create("caramel-test", MFD_CLOEXEC);
+	CHECK(memfd >= 0);
+	const char *content = "PIXELS";
+	CHECK(write(memfd, content, 6) == 6);
+
+	const char *meta = "DP-1";
+	CHECK(caramel_ipc_send_frame_fd(
+		sv[0], CARAMEL_CMD_IMG_PREPARED, meta, 4, memfd));
+
+	uint8_t type;
+	uint8_t buf[64];
+	uint32_t len;
+	int rfd = -1;
+	CHECK(caramel_ipc_recv_frame_fd(
+		sv[1], &type, buf, &len, sizeof(buf), &rfd));
+	CHECK(type == CARAMEL_CMD_IMG_PREPARED);
+	CHECK(len == 4 && memcmp(buf, meta, 4) == 0);
+	CHECK(rfd >= 0 && rfd != memfd);
+
+	char back[8] = {0};
+	CHECK(pread(rfd, back, 6, 0) == 6);
+	CHECK(memcmp(back, content, 6) == 0);
+
+	close(rfd);
+	close(memfd);
+	close(sv[0]);
+	close(sv[1]);
+	return 0;
+}
+
+// A frame sent without an fd must arrive with out_fd left at -1.
+static int test_no_fd(void) {
+	int sv[2];
+	CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
+	CHECK(caramel_ipc_send_frame_fd(sv[0], CARAMEL_CMD_STOP, NULL, 0, -1));
+
+	uint8_t type;
+	uint8_t buf[16];
+	uint32_t len;
+	int rfd = 0;
+	CHECK(caramel_ipc_recv_frame_fd(
+		sv[1], &type, buf, &len, sizeof(buf), &rfd));
+	CHECK(type == CARAMEL_CMD_STOP && len == 0 && rfd == -1);
+
+	close(sv[0]);
+	close(sv[1]);
+	return 0;
+}
+
 int main(void) {
 	int rc = 0;
 	rc |= test_roundtrip();
@@ -113,6 +167,8 @@ int main(void) {
 	rc |= test_send_rejects_oversize();
 	rc |= test_recv_rejects_bad_version();
 	rc |= test_recv_rejects_oversize_length();
+	rc |= test_fd_passing();
+	rc |= test_no_fd();
 	if (rc == 0) {
 		printf("ipc protocol: all checks passed\n");
 	}

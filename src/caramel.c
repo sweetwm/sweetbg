@@ -8,24 +8,82 @@
 #include "ipc/client.h"
 #include "ipc/protocol.h"
 
-static int cmd_img(const char *arg) {
+// Send IMG as "<path>" or, when targeting an output, "<path>\0<output>".
+static int cmd_img(const char *arg, const char *output) {
 	char resolved[PATH_MAX];
 	if (realpath(arg, resolved) == NULL) {
 		fprintf(stderr, "caramel: cannot use '%s': %s\n", arg,
 			strerror(errno));
 		return 1;
 	}
+
+	size_t path_len = strlen(resolved);
+	if (output == NULL) {
+		return caramel_client_request(
+			CARAMEL_CMD_IMG, resolved, (uint32_t)path_len);
+	}
+
+	size_t output_len = strlen(output);
+	if (output_len == 0 || output_len > 63) {
+		fprintf(stderr, "caramel: invalid --output name\n");
+		return 2;
+	}
+
+	size_t total = path_len + 1 + output_len;
+	if (total > CARAMEL_IPC_MAX_PAYLOAD) {
+		fprintf(stderr, "caramel: image request too long\n");
+		return 2;
+	}
+
+	char payload[PATH_MAX + 1 + 64];
+	memcpy(payload, resolved, path_len);
+	payload[path_len] = '\0';
+	memcpy(payload + path_len + 1, output, output_len);
 	return caramel_client_request(
-		CARAMEL_CMD_IMG, resolved, (uint32_t)strlen(resolved));
+		CARAMEL_CMD_IMG, payload, (uint32_t)total);
+}
+
+static int run_img(int argc, char **argv) {
+	const char *path = NULL;
+	const char *output = NULL;
+	for (int i = 2; i < argc; i++) {
+		const char *a = argv[i];
+		if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
+			if (i + 1 >= argc) {
+				fprintf(stderr,
+					"caramel: --output needs a name\n");
+				return 2;
+			}
+			output = argv[++i];
+		} else if (strncmp(a, "--output=", 9) == 0) {
+			output = a + 9;
+		} else if (a[0] == '-' && a[1] != '\0') {
+			fprintf(stderr, "caramel: unknown img option '%s'\n",
+				a);
+			return 2;
+		} else if (path == NULL) {
+			path = a;
+		} else {
+			fprintf(stderr, "caramel: img takes a single path\n");
+			return 2;
+		}
+	}
+	if (path == NULL) {
+		fprintf(stderr,
+			"usage: caramel img <path> [--output <name>]\n");
+		return 2;
+	}
+	return cmd_img(path, output);
 }
 
 static void usage(FILE *out) {
 	fputs("usage: caramel <command> [args]\n"
 	      "\n"
 	      "commands:\n"
-	      "  img <path>   set the wallpaper from an image file\n"
-	      "  query        print daemon and output status\n"
-	      "  stop         stop the running daemon\n"
+	      "  img <path> [--output <name>]   set the wallpaper\n"
+	      "  query                          print daemon and output "
+	      "status\n"
+	      "  stop                           stop the running daemon\n"
 	      "\n"
 	      "options:\n"
 	      "  -h, --help     show this help and exit\n"
@@ -56,11 +114,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (strcmp(cmd, "img") == 0) {
-		if (argc < 3) {
-			fprintf(stderr, "usage: caramel img <path>\n");
-			return 2;
-		}
-		return cmd_img(argv[2]);
+		return run_img(argc, argv);
 	}
 
 	if (strcmp(cmd, "query") == 0) {

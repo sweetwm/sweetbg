@@ -25,7 +25,7 @@ struct daemon {
 	struct caramel_registry *reg;
 	// Placeholder color shown when no image is set (XRGB8888 0x00RRGGBB)
 	uint32_t color;
-	char current_path[PATH_MAX];
+	char default_path[PATH_MAX];
 };
 
 static volatile sig_atomic_t g_running = 1;
@@ -57,56 +57,101 @@ static bool ensure_surfaces(struct caramel_registry *reg) {
 	return true;
 }
 
+static const char *effective_path(
+	const struct daemon *daemon, const struct caramel_output *output) {
+	if (output->wallpaper_override[0] != '\0') {
+		return output->wallpaper_override;
+	}
+	return daemon->default_path;
+}
+
+static bool paint_output(struct daemon *daemon, struct caramel_output *output,
+	const char *path) {
+	if (!output->surface.configured) {
+		return false;
+	}
+	if (path[0] != '\0') {
+		struct caramel_image image;
+		char err[128];
+		if (caramel_image_load(&image, path, err, sizeof(err))) {
+			caramel_surface_paint_image(&output->surface,
+				daemon->reg->shm, output->scale, &image);
+			caramel_image_free(&image);
+			return true;
+		}
+		fprintf(stderr, "carameld: %s\n", err);
+	}
+	caramel_surface_paint_color(&output->surface, daemon->reg->shm,
+		output->scale, daemon->color);
+	return false;
+}
+
 static void reconcile_paint(struct daemon *daemon) {
 	struct caramel_output *output;
-	bool any = false;
-	wl_list_for_each(output, &daemon->reg->outputs, link) {
-		if (output->surface.configured &&
-			output->surface.needs_repaint) {
-			any = true;
-			break;
-		}
-	}
-	if (!any) {
-		return;
-	}
-
-	struct caramel_image image;
-	char err[128];
-	bool have_image = daemon->current_path[0] != '\0' &&
-			  caramel_image_load(&image, daemon->current_path, err,
-				  sizeof(err));
-
+	bool decoded = false;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured ||
 			!output->surface.needs_repaint) {
 			continue;
 		}
-		if (have_image) {
-			caramel_surface_paint_image(&output->surface,
-				daemon->reg->shm, output->scale, &image);
-		} else {
-			caramel_surface_paint_color(&output->surface,
-				daemon->reg->shm, output->scale, daemon->color);
-		}
+		decoded |= paint_output(
+			daemon, output, effective_path(daemon, output));
 	}
-
-	if (have_image) {
-		caramel_image_free(&image);
+	if (decoded) {
 		trim_heap();
 	}
 }
 
+static bool split_img_payload(const uint8_t *payload, uint32_t len, char *path,
+	size_t path_size, char *target, size_t target_size) {
+	const uint8_t *nul = memchr(payload, '\0', len);
+	size_t path_len = nul != NULL ? (size_t)(nul - payload) : (size_t)len;
+	if (path_len == 0 || path_len >= path_size) {
+		return false;
+	}
+	memcpy(path, payload, path_len);
+	path[path_len] = '\0';
+
+	target[0] = '\0';
+	if (nul != NULL) {
+		size_t target_len = (size_t)len - path_len - 1;
+		if (target_len == 0 || target_len >= target_size ||
+			memchr(nul + 1, '\0', target_len) != NULL) {
+			return false;
+		}
+		memcpy(target, nul + 1, target_len);
+		target[target_len] = '\0';
+	}
+	return true;
+}
+
 static uint8_t handle_img(struct daemon *daemon, const uint8_t *payload,
 	uint32_t len, char *message, size_t message_size) {
-	if (len == 0 || len >= PATH_MAX || memchr(payload, '\0', len) != NULL) {
-		snprintf(message, message_size, "invalid image path");
+	char path[PATH_MAX];
+	char target[64];
+	if (len == 0 || !split_img_payload(payload, len, path, sizeof(path),
+				target, sizeof(target))) {
+		snprintf(message, message_size, "invalid image request");
 		return CARAMEL_STATUS_ERR_BAD_REQUEST;
 	}
 
-	char path[PATH_MAX];
-	memcpy(path, payload, len);
-	path[len] = '\0';
+	// Resolve a named output up front so a typo fails before decoding
+	struct caramel_output *match = NULL;
+	struct caramel_output *output;
+	if (target[0] != '\0') {
+		wl_list_for_each(output, &daemon->reg->outputs, link) {
+			if (output->name != NULL &&
+				strcmp(output->name, target) == 0) {
+				match = output;
+				break;
+			}
+		}
+		if (match == NULL) {
+			snprintf(message, message_size, "no output named %s",
+				target);
+			return CARAMEL_STATUS_ERR_BAD_REQUEST;
+		}
+	}
 
 	struct caramel_image image;
 	char err[128];
@@ -115,18 +160,30 @@ static uint8_t handle_img(struct daemon *daemon, const uint8_t *payload,
 		return CARAMEL_STATUS_ERR_IMAGE;
 	}
 
-	struct caramel_output *output;
-	wl_list_for_each(output, &daemon->reg->outputs, link) {
-		if (output->surface.configured) {
-			caramel_surface_paint_image(&output->surface,
-				daemon->reg->shm, output->scale, &image);
+	if (match != NULL) {
+		memcpy(match->wallpaper_override, path, strlen(path) + 1);
+		if (match->surface.configured) {
+			caramel_surface_paint_image(&match->surface,
+				daemon->reg->shm, match->scale, &image);
 		}
+		snprintf(message, message_size, "applied %s to %s", path,
+			target);
+	} else {
+		// No target: this becomes the default and clears overrides
+		memcpy(daemon->default_path, path, strlen(path) + 1);
+		wl_list_for_each(output, &daemon->reg->outputs, link) {
+			output->wallpaper_override[0] = '\0';
+			if (output->surface.configured) {
+				caramel_surface_paint_image(&output->surface,
+					daemon->reg->shm, output->scale,
+					&image);
+			}
+		}
+		snprintf(message, message_size, "applied %s", path);
 	}
+
 	caramel_image_free(&image);
 	trim_heap();
-
-	memcpy(daemon->current_path, path, (size_t)len + 1);
-	snprintf(message, message_size, "applied %s", path);
 	return CARAMEL_STATUS_OK;
 }
 
@@ -152,20 +209,29 @@ __attribute__((format(printf, 4, 5))) static void append_line(
 static uint8_t handle_query(
 	struct daemon *daemon, char *message, size_t message_size) {
 	size_t off = 0;
-	if (daemon->current_path[0] != '\0') {
-		append_line(message, message_size, &off, "image: %s\n",
-			daemon->current_path);
+	if (daemon->default_path[0] != '\0') {
+		append_line(message, message_size, &off, "default: %s\n",
+			daemon->default_path);
 	} else {
-		append_line(message, message_size, &off, "color: #%06x\n",
-			daemon->color & 0xffffffu);
+		append_line(message, message_size, &off,
+			"default: color #%06x\n", daemon->color & 0xffffffu);
 	}
 
 	struct caramel_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
-		append_line(message, message_size, &off, "%s: %dx%d scale %d\n",
-			output->name != NULL ? output->name : "(unnamed)",
-			output->pixel_width, output->pixel_height,
-			output->scale);
+		const char *name =
+			output->name != NULL ? output->name : "(unnamed)";
+		if (output->wallpaper_override[0] != '\0') {
+			append_line(message, message_size, &off,
+				"%s: %dx%d scale %d (override: %s)\n", name,
+				output->pixel_width, output->pixel_height,
+				output->scale, output->wallpaper_override);
+		} else {
+			append_line(message, message_size, &off,
+				"%s: %dx%d scale %d\n", name,
+				output->pixel_width, output->pixel_height,
+				output->scale);
+		}
 	}
 
 	// Drop the trailing newline; the client prints its own
@@ -272,7 +338,7 @@ static void apply_config(struct daemon *daemon) {
 	if (caramel_image_load(
 		    &probe, cfg.image, image_err, sizeof(image_err))) {
 		caramel_image_free(&probe);
-		memcpy(daemon->current_path, cfg.image, strlen(cfg.image) + 1);
+		memcpy(daemon->default_path, cfg.image, strlen(cfg.image) + 1);
 	} else {
 		fprintf(stderr, "carameld: configured image: %s\n", image_err);
 	}
@@ -298,7 +364,7 @@ static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {
 	struct daemon daemon = {
 		.display = display,
 		.reg = &reg,
-		.current_path = {0},
+		.default_path = {0},
 	};
 	apply_config(&daemon);
 

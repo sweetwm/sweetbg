@@ -1,0 +1,6 @@
+option(
+	'systemd',
+	type: 'feature',
+	value: 'auto',
+	description: 'Install the carameld systemd user service',
+)

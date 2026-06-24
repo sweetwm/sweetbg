@@ -70,4 +70,5 @@ executable(
 )
 
 subdir('doc')
+subdir('systemd')
 subdir('tests')

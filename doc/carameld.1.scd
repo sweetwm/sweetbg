@@ -17,8 +17,10 @@ causes no periodic work and keeps almost no decoded image memory resident.
 
 On startup it reads its configuration (see *caramel*(5)), connects to the
 Wayland display, and serves requests from a *caramel*(1) client over a private
-Unix-domain socket. Run it from a session startup script. It runs in the
-foreground until it receives a *stop* request or is terminated.
+Unix-domain socket. Run it from a session startup script, your compositor's
+*exec* directive, or the bundled systemd user service
+(_systemctl --user enable --now carameld.service_). It runs in the foreground
+until it receives a *stop* request or is terminated.
 
 When the compositor supports the *wp_viewporter* and *wp_fractional_scale_v1*
 protocols, *carameld* renders each wallpaper at the output's exact device
@@ -55,6 +57,9 @@ _$XDG_CONFIG_HOME/caramel/config.toml_
 
 _$XDG_RUNTIME_DIR/caramel.sock_
 	Control socket the client connects to.
+
+_$prefix/lib/systemd/user/carameld.service_
+	Optional systemd user service, installed when systemd is present.
 
 # SIGNALS
 

@@ -20,6 +20,12 @@ Wayland display, and serves requests from a *caramel*(1) client over a private
 Unix-domain socket. Run it from a session startup script. It runs in the
 foreground until it receives a *stop* request or is terminated.
 
+When the compositor supports the *wp_viewporter* and *wp_fractional_scale_v1*
+protocols, *carameld* renders each wallpaper at the output's exact device
+resolution and maps it down through a viewport, so wallpapers stay sharp on
+fractionally scaled outputs (for example 1.5x). Without those protocols it falls
+back to integer output scaling.
+
 Only one daemon runs at a time; a second instance exits if a live socket
 already exists.
 

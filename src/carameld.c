@@ -80,7 +80,8 @@ static bool ensure_surfaces(struct caramel_registry *reg) {
 			continue;
 		}
 		if (!caramel_surface_create(&output->surface, reg->compositor,
-			    reg->layer_shell, output->wl_output)) {
+			    reg->layer_shell, output->wl_output,
+			    reg->viewporter, reg->fractional_scale_manager)) {
 			fprintf(stderr,
 				"carameld: failed to create a layer surface\n");
 			return false;
@@ -303,9 +304,12 @@ static uint8_t handle_query_outputs(
 		}
 		uint32_t scale =
 			output->scale > 0 ? (uint32_t)output->scale : 1;
+		uint32_t pw;
+		uint32_t ph;
+		caramel_surface_buffer_size(
+			&output->surface, output->scale, &pw, &ph);
 		append_line(message, message_size, &off, "%s %u %u %u\n",
-			output->name, output->surface.width * scale,
-			output->surface.height * scale, scale);
+			output->name, pw, ph, scale);
 	}
 	if (off > 0 && off <= message_size && message[off - 1] == '\n') {
 		message[off - 1] = '\0';

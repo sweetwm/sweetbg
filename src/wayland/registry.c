@@ -4,12 +4,16 @@
 #include <string.h>
 #include <wayland-client.h>
 
+#include "fractional-scale-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
 #include "wayland/output.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 #define COMPOSITOR_MAX_VERSION 4
 #define LAYER_SHELL_MAX_VERSION 4
 #define SHM_VERSION 1
+#define VIEWPORTER_VERSION 1
+#define FRACTIONAL_SCALE_VERSION 1
 
 static uint32_t min_u32(uint32_t a, uint32_t b) {
 	return a < b ? a : b;
@@ -30,6 +34,15 @@ static void handle_global(void *data, struct wl_registry *registry,
 		reg->layer_shell = wl_registry_bind(registry, name,
 			&zwlr_layer_shell_v1_interface,
 			min_u32(version, LAYER_SHELL_MAX_VERSION));
+	} else if (strcmp(interface, wp_viewporter_interface.name) == 0) {
+		reg->viewporter = wl_registry_bind(registry, name,
+			&wp_viewporter_interface, VIEWPORTER_VERSION);
+	} else if (strcmp(interface,
+			   wp_fractional_scale_manager_v1_interface.name) ==
+		   0) {
+		reg->fractional_scale_manager = wl_registry_bind(registry, name,
+			&wp_fractional_scale_manager_v1_interface,
+			FRACTIONAL_SCALE_VERSION);
 	} else if (strcmp(interface, wl_output_interface.name) == 0) {
 		caramel_output_create(&reg->outputs, registry, name, version);
 	}
@@ -53,6 +66,8 @@ bool caramel_registry_init(
 	reg->compositor = NULL;
 	reg->shm = NULL;
 	reg->layer_shell = NULL;
+	reg->viewporter = NULL;
+	reg->fractional_scale_manager = NULL;
 	wl_list_init(&reg->outputs);
 
 	reg->registry = wl_display_get_registry(display);
@@ -101,6 +116,15 @@ bool caramel_registry_init(
 
 void caramel_registry_finish(struct caramel_registry *reg) {
 	caramel_outputs_finish(&reg->outputs);
+	if (reg->fractional_scale_manager != NULL) {
+		wp_fractional_scale_manager_v1_destroy(
+			reg->fractional_scale_manager);
+		reg->fractional_scale_manager = NULL;
+	}
+	if (reg->viewporter != NULL) {
+		wp_viewporter_destroy(reg->viewporter);
+		reg->viewporter = NULL;
+	}
 	if (reg->layer_shell != NULL) {
 		zwlr_layer_shell_v1_destroy(reg->layer_shell);
 		reg->layer_shell = NULL;

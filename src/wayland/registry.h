@@ -5,12 +5,16 @@
 #include <wayland-client.h>
 
 struct zwlr_layer_shell_v1;
+struct wp_viewporter;
+struct wp_fractional_scale_manager_v1;
 
 struct caramel_registry {
 	struct wl_registry *registry;
 	struct wl_compositor *compositor;
 	struct wl_shm *shm;
 	struct zwlr_layer_shell_v1 *layer_shell;
+	struct wp_viewporter *viewporter;
+	struct wp_fractional_scale_manager_v1 *fractional_scale_manager;
 	struct wl_list outputs;
 };
 

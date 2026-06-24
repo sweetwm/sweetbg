@@ -1,8 +1,11 @@
 #include "wayland/surface.h"
 
+#include "fractional-scale-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 #define BACKGROUND_NAMESPACE "caramel"
+#define FRACTIONAL_SCALE_DENOM 120
 
 static void handle_configure(void *data,
 	struct zwlr_layer_surface_v1 *layer_surface, uint32_t serial,
@@ -31,19 +34,51 @@ static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
 	.closed = handle_closed,
 };
 
+static void handle_preferred_scale(
+	void *data, struct wp_fractional_scale_v1 *fractional, uint32_t scale) {
+	struct caramel_surface *surface = data;
+	(void)fractional;
+	if (scale != surface->fractional_scale) {
+		surface->fractional_scale = scale;
+		surface->needs_repaint = true;
+	}
+}
+
+static const struct wp_fractional_scale_v1_listener fractional_scale_listener =
+	{
+		.preferred_scale = handle_preferred_scale,
+};
+
 bool caramel_surface_create(struct caramel_surface *surface,
 	struct wl_compositor *compositor,
-	struct zwlr_layer_shell_v1 *layer_shell, struct wl_output *output) {
+	struct zwlr_layer_shell_v1 *layer_shell, struct wl_output *output,
+	struct wp_viewporter *viewporter,
+	struct wp_fractional_scale_manager_v1 *fractional_manager) {
 	surface->wl_surface = NULL;
 	surface->layer_surface = NULL;
 	surface->width = 0;
 	surface->height = 0;
 	surface->configured = false;
 	surface->needs_repaint = false;
+	surface->viewport = NULL;
+	surface->fractional = NULL;
+	surface->fractional_scale = 0;
 
 	surface->wl_surface = wl_compositor_create_surface(compositor);
 	if (surface->wl_surface == NULL) {
 		return false;
+	}
+
+	if (viewporter != NULL && fractional_manager != NULL) {
+		surface->viewport = wp_viewporter_get_viewport(
+			viewporter, surface->wl_surface);
+		surface->fractional =
+			wp_fractional_scale_manager_v1_get_fractional_scale(
+				fractional_manager, surface->wl_surface);
+		if (surface->fractional != NULL) {
+			wp_fractional_scale_v1_add_listener(surface->fractional,
+				&fractional_scale_listener, surface);
+		}
 	}
 
 	surface->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
@@ -70,17 +105,36 @@ bool caramel_surface_create(struct caramel_surface *surface,
 	return true;
 }
 
+void caramel_surface_buffer_size(const struct caramel_surface *surface,
+	int32_t int_scale, uint32_t *pixel_width, uint32_t *pixel_height) {
+	if (surface->fractional_scale > 0) {
+		*pixel_width =
+			(uint32_t)(((uint64_t)surface->width *
+						   surface->fractional_scale +
+					   FRACTIONAL_SCALE_DENOM - 1) /
+				   FRACTIONAL_SCALE_DENOM);
+		*pixel_height =
+			(uint32_t)(((uint64_t)surface->height *
+						   surface->fractional_scale +
+					   FRACTIONAL_SCALE_DENOM - 1) /
+				   FRACTIONAL_SCALE_DENOM);
+		return;
+	}
+	if (int_scale < 1) {
+		int_scale = 1;
+	}
+	*pixel_width = surface->width * (uint32_t)int_scale;
+	*pixel_height = surface->height * (uint32_t)int_scale;
+}
+
 static bool prepare_buffer(struct caramel_surface *surface, struct wl_shm *shm,
 	int32_t scale, uint32_t *pixel_width, uint32_t *pixel_height) {
 	if (!surface->configured || surface->wl_surface == NULL) {
 		return false;
 	}
-	if (scale < 1) {
-		scale = 1;
-	}
-
-	uint32_t pw = surface->width * (uint32_t)scale;
-	uint32_t ph = surface->height * (uint32_t)scale;
+	uint32_t pw;
+	uint32_t ph;
+	caramel_surface_buffer_size(surface, scale, &pw, &ph);
 
 	// Release any previous buffer before replacing it
 	caramel_buffer_destroy(&surface->buffer);
@@ -92,13 +146,18 @@ static bool prepare_buffer(struct caramel_surface *surface, struct wl_shm *shm,
 	return true;
 }
 
-// Attach the freshly filled buffer, damage the whole surface, and commit
 static void present(struct caramel_surface *surface, int32_t scale,
 	uint32_t pixel_width, uint32_t pixel_height) {
-	if (scale < 1) {
-		scale = 1;
+	if (surface->viewport != NULL && surface->fractional_scale > 0) {
+		wl_surface_set_buffer_scale(surface->wl_surface, 1);
+		wp_viewport_set_destination(surface->viewport,
+			(int32_t)surface->width, (int32_t)surface->height);
+	} else {
+		if (scale < 1) {
+			scale = 1;
+		}
+		wl_surface_set_buffer_scale(surface->wl_surface, scale);
 	}
-	wl_surface_set_buffer_scale(surface->wl_surface, scale);
 	wl_surface_attach(surface->wl_surface, surface->buffer.wl_buffer, 0, 0);
 	wl_surface_damage_buffer(surface->wl_surface, 0, 0,
 		(int32_t)pixel_width, (int32_t)pixel_height);
@@ -138,6 +197,14 @@ bool caramel_surface_attach_prepared(struct caramel_surface *surface,
 }
 
 void caramel_surface_destroy(struct caramel_surface *surface) {
+	if (surface->fractional != NULL) {
+		wp_fractional_scale_v1_destroy(surface->fractional);
+		surface->fractional = NULL;
+	}
+	if (surface->viewport != NULL) {
+		wp_viewport_destroy(surface->viewport);
+		surface->viewport = NULL;
+	}
 	if (surface->layer_surface != NULL) {
 		zwlr_layer_surface_v1_destroy(surface->layer_surface);
 		surface->layer_surface = NULL;

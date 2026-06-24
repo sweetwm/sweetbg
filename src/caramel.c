@@ -8,6 +8,8 @@
 #include "ipc/client.h"
 #include "ipc/protocol.h"
 
+#define MAX_IMG_OVERRIDES 16
+
 static int cmd_img(const char *arg, const char *output) {
 	char resolved[PATH_MAX];
 	if (realpath(arg, resolved) == NULL) {
@@ -22,9 +24,30 @@ static int cmd_img(const char *arg, const char *output) {
 	return caramel_client_set_image(resolved, output);
 }
 
+struct img_override {
+	const char *name;
+	size_t name_len;
+	const char *path;
+};
+
+static bool is_override_token(const char *arg, struct img_override *out) {
+	const char *eq = strchr(arg, '=');
+	if (eq == NULL || eq == arg ||
+		memchr(arg, '/', (size_t)(eq - arg)) != NULL) {
+		return false;
+	}
+	out->name = arg;
+	out->name_len = (size_t)(eq - arg);
+	out->path = eq + 1;
+	return true;
+}
+
 static int run_img(int argc, char **argv) {
-	const char *path = NULL;
-	const char *output = NULL;
+	const char *default_path = NULL;
+	const char *flag_output = NULL;
+	struct img_override overrides[MAX_IMG_OVERRIDES];
+	int override_count = 0;
+
 	for (int i = 2; i < argc; i++) {
 		const char *a = argv[i];
 		if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
@@ -33,36 +56,79 @@ static int run_img(int argc, char **argv) {
 					"caramel: --output needs a name\n");
 				return 2;
 			}
-			output = argv[++i];
-		} else if (strncmp(a, "--output=", 9) == 0) {
-			output = a + 9;
-		} else if (a[0] == '-' && a[1] != '\0') {
+			flag_output = argv[++i];
+			continue;
+		}
+		if (strncmp(a, "--output=", 9) == 0) {
+			flag_output = a + 9;
+			continue;
+		}
+		if (a[0] == '-' && a[1] != '\0') {
 			fprintf(stderr, "caramel: unknown img option '%s'\n",
 				a);
 			return 2;
-		} else if (path == NULL) {
-			path = a;
+		}
+
+		struct img_override token;
+		if (is_override_token(a, &token)) {
+			if (override_count >= MAX_IMG_OVERRIDES) {
+				fprintf(stderr, "caramel: too many outputs\n");
+				return 2;
+			}
+			overrides[override_count++] = token;
+		} else if (default_path == NULL) {
+			default_path = a;
 		} else {
-			fprintf(stderr, "caramel: img takes a single path\n");
+			fprintf(stderr,
+				"caramel: img takes one default path\n");
 			return 2;
 		}
 	}
-	if (path == NULL) {
+
+	if (flag_output != NULL) {
+		if (override_count > 0 || default_path == NULL) {
+			fprintf(stderr, "caramel: use either '--output <name>' "
+					"with one path or <name>=<path> "
+					"arguments\n");
+			return 2;
+		}
+		return cmd_img(default_path, flag_output);
+	}
+
+	if (default_path == NULL && override_count == 0) {
 		fprintf(stderr,
-			"usage: caramel img <path> [--output <name>]\n");
+			"usage: caramel img <path> | <name>=<path>... | "
+			"<path> --output <name>\n");
 		return 2;
 	}
-	return cmd_img(path, output);
+
+	int rc = 0;
+	if (default_path != NULL) {
+		rc |= cmd_img(default_path, NULL);
+	}
+	for (int i = 0; i < override_count; i++) {
+		char name[64];
+		if (overrides[i].name_len >= sizeof(name)) {
+			fprintf(stderr, "caramel: invalid output name\n");
+			rc = 2;
+			continue;
+		}
+		memcpy(name, overrides[i].name, overrides[i].name_len);
+		name[overrides[i].name_len] = '\0';
+		rc |= cmd_img(overrides[i].path, name);
+	}
+	return rc;
 }
 
 static void usage(FILE *out) {
 	fputs("usage: caramel <command> [args]\n"
 	      "\n"
 	      "commands:\n"
-	      "  img <path> [--output <name>]   set the wallpaper\n"
-	      "  query                          print daemon and output "
-	      "status\n"
-	      "  stop                           stop the running daemon\n"
+	      "  img <path>                 set the wallpaper on all outputs\n"
+	      "  img <name>=<path> ...      set a wallpaper per output\n"
+	      "  img <path> --output <name> set the wallpaper on one output\n"
+	      "  query                      print daemon and output status\n"
+	      "  stop                       stop the running daemon\n"
 	      "\n"
 	      "options:\n"
 	      "  -h, --help     show this help and exit\n"

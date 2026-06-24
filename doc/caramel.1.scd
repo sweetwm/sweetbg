@@ -16,14 +16,20 @@ parses arguments, sends one request, prints the response, and returns.
 
 # COMMANDS
 
-*img* <path> [*--output* <name>]
-	Set the wallpaper to the image at <path> (JPEG, PNG, or WebP). The path
-	is resolved to an absolute path before being sent.
+*img* <path>
+	Set <path> (JPEG, PNG, or WebP) as the default wallpaper on every
+	output, including outputs connected later, clearing any per-output
+	overrides. Paths are resolved to absolute paths before being sent.
 
-	Without *--output*, the image becomes the default for every output,
-	including outputs connected later, and clears any per-output overrides.
-	With *--output* <name>, only the named output is changed and the image
-	becomes that output's override. Output names are those shown by *query*.
+*img* <name>=<path> [<name>=<path> ...]
+	Set a different wallpaper per output in one command. Each <name> is an
+	output name from *query* (for example _DP-1_); each is set as that
+	output's override. A bare <path> may be mixed in to also set the
+	default, e.g. _caramel img bg.jpg DP-1=left.jpg_.
+
+*img* <path> *--output* <name>
+	Set <path> on the single output <name> only (equivalent to the
+	_<name>=<path>_ form).
 
 *query*
 	Print the current default wallpaper (image path or placeholder color)

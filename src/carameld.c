@@ -17,12 +17,20 @@
 #include "wayland/registry.h"
 #include "wayland/surface.h"
 
+struct assignment {
+	char name[64];
+	char path[PATH_MAX];
+};
+
+#define MAX_ASSIGNMENTS 16
+
 struct daemon {
 	struct wl_display *display;
 	struct caramel_registry *reg;
-	// Placeholder color shown when no image is set (XRGB8888 0x00RRGGBB)
 	uint32_t color;
 	char default_path[PATH_MAX];
+	struct assignment assignments[MAX_ASSIGNMENTS];
+	size_t assignment_count;
 };
 
 static volatile sig_atomic_t g_running = 1;
@@ -30,6 +38,38 @@ static volatile sig_atomic_t g_running = 1;
 static void handle_signal(int signal_number) {
 	(void)signal_number;
 	g_running = 0;
+}
+
+static const char *assignment_for(
+	const struct daemon *daemon, const char *name) {
+	if (name == NULL) {
+		return NULL;
+	}
+	for (size_t i = 0; i < daemon->assignment_count; i++) {
+		if (strcmp(daemon->assignments[i].name, name) == 0) {
+			return daemon->assignments[i].path;
+		}
+	}
+	return NULL;
+}
+
+static void set_assignment(
+	struct daemon *daemon, const char *name, const char *path) {
+	for (size_t i = 0; i < daemon->assignment_count; i++) {
+		if (strcmp(daemon->assignments[i].name, name) == 0) {
+			snprintf(daemon->assignments[i].path,
+				sizeof(daemon->assignments[i].path), "%s",
+				path);
+			return;
+		}
+	}
+	if (daemon->assignment_count >= MAX_ASSIGNMENTS) {
+		return;
+	}
+	struct assignment *entry =
+		&daemon->assignments[daemon->assignment_count++];
+	snprintf(entry->name, sizeof(entry->name), "%s", name);
+	snprintf(entry->path, sizeof(entry->path), "%s", path);
 }
 
 static bool ensure_surfaces(struct caramel_registry *reg) {
@@ -50,10 +90,8 @@ static bool ensure_surfaces(struct caramel_registry *reg) {
 
 static const char *effective_path(
 	const struct daemon *daemon, const struct caramel_output *output) {
-	if (output->wallpaper_override[0] != '\0') {
-		return output->wallpaper_override;
-	}
-	return daemon->default_path;
+	const char *assigned = assignment_for(daemon, output->name);
+	return assigned != NULL ? assigned : daemon->default_path;
 }
 
 static void client_binary(char *out, size_t out_size) {
@@ -187,10 +225,9 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	// Update remembered assignments unless this is a daemon-driven repaint
 	if (req.mode == CARAMEL_IMG_DEFAULT) {
 		memcpy(daemon->default_path, req.path, strlen(req.path) + 1);
-		match->wallpaper_override[0] = '\0';
+		daemon->assignment_count = 0;
 	} else if (req.mode == CARAMEL_IMG_OVERRIDE) {
-		memcpy(match->wallpaper_override, req.path,
-			strlen(req.path) + 1);
+		set_assignment(daemon, req.name, req.path);
 	}
 	snprintf(message, message_size, "applied %s to %s", req.path, req.name);
 	return CARAMEL_STATUS_OK;
@@ -230,11 +267,12 @@ static uint8_t handle_query(
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		const char *name =
 			output->name != NULL ? output->name : "(unnamed)";
-		if (output->wallpaper_override[0] != '\0') {
+		const char *assigned = assignment_for(daemon, output->name);
+		if (assigned != NULL) {
 			append_line(message, message_size, &off,
 				"%s: %dx%d scale %d (override: %s)\n", name,
 				output->pixel_width, output->pixel_height,
-				output->scale, output->wallpaper_override);
+				output->scale, assigned);
 		} else {
 			append_line(message, message_size, &off,
 				"%s: %dx%d scale %d\n", name,
@@ -368,17 +406,28 @@ static void apply_config(struct daemon *daemon) {
 	}
 	daemon->color = cfg.color;
 
-	if (cfg.image[0] == '\0') {
-		return;
+	if (cfg.image[0] != '\0') {
+		if (access(cfg.image, R_OK) == 0) {
+			memcpy(daemon->default_path, cfg.image,
+				strlen(cfg.image) + 1);
+		} else {
+			fprintf(stderr, "carameld: configured image %s: %s\n",
+				cfg.image, strerror(errno));
+		}
 	}
-	// The daemon does not decode; just check the file is readable here and
-	// let the spawned client report any decode error when it runs
-	if (access(cfg.image, R_OK) != 0) {
-		fprintf(stderr, "carameld: configured image %s: %s\n",
-			cfg.image, strerror(errno));
-		return;
+
+	for (size_t i = 0; i < cfg.output_count; i++) {
+		const struct caramel_config_output *out = &cfg.outputs[i];
+		if (out->image[0] == '\0') {
+			continue;
+		}
+		if (access(out->image, R_OK) == 0) {
+			set_assignment(daemon, out->name, out->image);
+		} else {
+			fprintf(stderr, "carameld: configured image %s: %s\n",
+				out->image, strerror(errno));
+		}
 	}
-	memcpy(daemon->default_path, cfg.image, strlen(cfg.image) + 1);
 }
 
 static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {

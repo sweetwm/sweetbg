@@ -1,7 +1,6 @@
 #ifndef CARAMEL_WAYLAND_OUTPUT_H
 #define CARAMEL_WAYLAND_OUTPUT_H
 
-#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <wayland-client.h>
@@ -19,7 +18,6 @@ struct caramel_output {
 	char *name;
 	char *description;
 	struct caramel_surface surface;
-	char wallpaper_override[PATH_MAX];
 };
 
 bool caramel_output_create(struct wl_list *outputs,

@@ -74,6 +74,34 @@ static int test_unquoted_and_missing_eq_fail(void) {
 	return 0;
 }
 
+static int test_per_output_sections(void) {
+	struct caramel_config cfg;
+	char err[256];
+	const char *text = "image = \"/default.jpg\"\n"
+			   "[output.DP-1]\n"
+			   "image = \"/left.jpg\"\n"
+			   "[output.HDMI-A-1]  # the tv\n"
+			   "image = \"/tv.png\"\n";
+	CHECK(parse(text, &cfg, err, sizeof(err)));
+	CHECK(strcmp(cfg.image, "/default.jpg") == 0);
+	CHECK(cfg.output_count == 2);
+	CHECK(strcmp(cfg.outputs[0].name, "DP-1") == 0);
+	CHECK(strcmp(cfg.outputs[0].image, "/left.jpg") == 0);
+	CHECK(strcmp(cfg.outputs[1].name, "HDMI-A-1") == 0);
+	CHECK(strcmp(cfg.outputs[1].image, "/tv.png") == 0);
+	return 0;
+}
+
+static int test_bad_sections_fail(void) {
+	struct caramel_config cfg;
+	char err[256];
+	CHECK(!parse("[monitor.DP-1]\n", &cfg, err, sizeof(err)));
+	CHECK(!parse("[output.DP-1\n", &cfg, err, sizeof(err)));
+	CHECK(!parse("[output.DP-1]\ncolor = \"#ffffff\"\n", &cfg, err,
+		sizeof(err)));
+	return 0;
+}
+
 int main(void) {
 	int rc = 0;
 	rc |= test_full_config();
@@ -81,6 +109,8 @@ int main(void) {
 	rc |= test_unknown_key_fails();
 	rc |= test_bad_color_fails();
 	rc |= test_unquoted_and_missing_eq_fail();
+	rc |= test_per_output_sections();
+	rc |= test_bad_sections_fail();
 	if (rc == 0) {
 		printf("config: all checks passed\n");
 	}

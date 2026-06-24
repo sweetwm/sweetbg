@@ -16,12 +16,15 @@ start. A runtime *caramel img* change is not written back to this file.
 
 The format is a small subset of TOML: top-level _key = "value"_ entries with
 double-quoted string values, _#_ comments (including trailing comments), and
-nothing else. Unknown keys, unquoted values, and malformed values are errors.
+_[output.NAME]_ sections. Unknown keys, unquoted values, malformed values, and
+unknown sections are errors.
 
 # KEYS
 
+These top-level keys set the defaults applied to every output:
+
 *image*
-	Absolute path to the startup wallpaper (JPEG, PNG, or WebP). When unset,
+	Absolute path to the default wallpaper (JPEG, PNG, or WebP). When unset,
 	the placeholder color is shown until an image is set with *caramel*(1).
 
 *color*
@@ -33,12 +36,25 @@ nothing else. Unknown keys, unquoted values, and malformed values are errors.
 	each output, preserving aspect ratio, with the overflow cropped from the
 	center.
 
+# PER-OUTPUT SECTIONS
+
+An _[output.NAME]_ section sets the wallpaper for one output, overriding the
+default _image_. NAME is the output name shown by *caramel query* (for example
+_DP-1_ or _HDMI-A-1_). The only key supported in a section is *image*. An output
+without a matching section uses the top-level default.
+
 # EXAMPLE
 
 ```
-image = "/home/me/Pictures/wallpaper.jpg"
+image = "/home/me/Pictures/default.jpg"
 color = "#1e1e2e"
 fit   = "cover"
+
+[output.DP-1]
+image = "/home/me/Pictures/left.jpg"
+
+[output.HDMI-A-1]
+image = "/home/me/Pictures/tv.png"
 ```
 
 # SEE ALSO

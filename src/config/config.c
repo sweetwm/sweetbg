@@ -11,6 +11,7 @@ void caramel_config_defaults(struct caramel_config *cfg) {
 	cfg->image[0] = '\0';
 	cfg->color = DEFAULT_COLOR;
 	cfg->fit = CARAMEL_FIT_COVER;
+	cfg->output_count = 0;
 }
 
 // Skip leading blanks and strip trailing blanks/newline in place
@@ -117,10 +118,74 @@ static bool apply_pair(struct caramel_config *cfg, const char *key,
 	return false;
 }
 
+static bool apply_output_pair(struct caramel_config_output *output,
+	const char *key, const char *value, const char *name, int line,
+	char *err, size_t err_size) {
+	char text[PATH_MAX];
+	if (!parse_string(value, text, sizeof(text))) {
+		snprintf(err, err_size, "%s:%d: value must be a quoted string",
+			name, line);
+		return false;
+	}
+	if (strcmp(key, "image") == 0) {
+		memcpy(output->image, text, strlen(text) + 1);
+		return true;
+	}
+	snprintf(err, err_size, "%s:%d: unknown key '%s' in [output]", name,
+		line, key);
+	return false;
+}
+
+static struct caramel_config_output *parse_section(struct caramel_config *cfg,
+	char *line, const char *name, int lineno, char *err, size_t err_size) {
+	char *close = strchr(line, ']');
+	const char *after = close != NULL ? close + 1 : NULL;
+	while (after != NULL && (*after == ' ' || *after == '\t')) {
+		after++;
+	}
+	if (close == NULL || (*after != '\0' && *after != '#')) {
+		snprintf(err, err_size, "%s:%d: malformed section", name,
+			lineno);
+		return NULL;
+	}
+	*close = '\0';
+
+	const char *prefix = "output.";
+	const char *inner = line + 1;
+	if (strncmp(inner, prefix, strlen(prefix)) != 0) {
+		snprintf(err, err_size, "%s:%d: unknown section [%s]", name,
+			lineno, inner);
+		return NULL;
+	}
+	const char *output_name = inner + strlen(prefix);
+	if (output_name[0] == '\0' ||
+		strlen(output_name) >= sizeof(cfg->outputs[0].name)) {
+		snprintf(err, err_size, "%s:%d: invalid output name", name,
+			lineno);
+		return NULL;
+	}
+
+	for (size_t i = 0; i < cfg->output_count; i++) {
+		if (strcmp(cfg->outputs[i].name, output_name) == 0) {
+			return &cfg->outputs[i];
+		}
+	}
+	if (cfg->output_count >= CARAMEL_CONFIG_MAX_OUTPUTS) {
+		snprintf(err, err_size, "%s:%d: too many [output] sections",
+			name, lineno);
+		return NULL;
+	}
+	struct caramel_config_output *out = &cfg->outputs[cfg->output_count++];
+	memcpy(out->name, output_name, strlen(output_name) + 1);
+	out->image[0] = '\0';
+	return out;
+}
+
 bool caramel_config_parse(FILE *fp, const char *name,
 	struct caramel_config *cfg, char *err, size_t err_size) {
 	char buffer[CONFIG_LINE_MAX];
 	int line = 0;
+	struct caramel_config_output *current = NULL;
 	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
 		line++;
 		if (strchr(buffer, '\n') == NULL && feof(fp) == 0) {
@@ -131,6 +196,14 @@ bool caramel_config_parse(FILE *fp, const char *name,
 
 		char *text = trim(buffer);
 		if (*text == '\0' || *text == '#') {
+			continue;
+		}
+		if (*text == '[') {
+			current = parse_section(
+				cfg, text, name, line, err, err_size);
+			if (current == NULL) {
+				return false;
+			}
 			continue;
 		}
 
@@ -148,7 +221,13 @@ bool caramel_config_parse(FILE *fp, const char *name,
 				line);
 			return false;
 		}
-		if (!apply_pair(cfg, key, value, name, line, err, err_size)) {
+
+		bool ok = current == NULL
+				  ? apply_pair(cfg, key, value, name, line, err,
+					    err_size)
+				  : apply_output_pair(current, key, value, name,
+					    line, err, err_size);
+		if (!ok) {
 			return false;
 		}
 	}

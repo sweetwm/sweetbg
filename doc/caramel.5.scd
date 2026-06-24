@@ -28,13 +28,20 @@ These top-level keys set the defaults applied to every output:
 	the placeholder color is shown until an image is set with *caramel*(1).
 
 *color*
-	Placeholder color shown before an image is set, as _"#rrggbb"_.
-	Defaults to _"#1e1e2e"_.
+	Background color, as _"#rrggbb"_. Shown before an image is set, and behind
+	the image where the _contain_ and _center_ fit modes do not cover the
+	output. Defaults to _"#1e1e2e"_.
 
 *fit*
-	Image fit mode. Only _"cover"_ is supported: the image is scaled to fill
-	each output, preserving aspect ratio, with the overflow cropped from the
-	center.
+	Image fit mode. Defaults to _"cover"_.
+
+	- _cover_: scale to fill the output, preserving aspect ratio, cropping the
+	  overflow from the center.
+	- _contain_: scale to fit entirely inside the output, preserving aspect
+	  ratio, with the background color filling the letterbox margins.
+	- _center_: place the image at its native size, centered; larger images are
+	  cropped, smaller ones are padded with the background color.
+	- _tile_: repeat the image at its native size across the output.
 
 # PER-OUTPUT SECTIONS
 

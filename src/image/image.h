@@ -5,8 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// A decoded image in XRGB8888 (one 0x00RRGGBB word per pixel). `pixels` owns
-// width * height * 4 bytes
+#include "config/config.h"
+
 struct caramel_image {
 	uint32_t width;
 	uint32_t height;
@@ -19,7 +19,7 @@ bool caramel_image_load(struct caramel_image *img, const char *path, char *err,
 // Free decoded pixels. Idempotent
 void caramel_image_free(struct caramel_image *img);
 
-bool caramel_image_render_cover(const struct caramel_image *src, uint32_t out_w,
-	uint32_t out_h, uint8_t *dst);
+bool caramel_image_render(const struct caramel_image *src, enum caramel_fit fit,
+	uint32_t out_w, uint32_t out_h, uint32_t color, uint8_t *dst);
 
 #endif

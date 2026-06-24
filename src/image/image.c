@@ -123,22 +123,77 @@ static void sample_box(const struct caramel_image *src,
 	out[3] = 0;
 }
 
-bool caramel_image_render_cover(const struct caramel_image *src, uint32_t out_w,
+static void fill_color(
+	uint8_t *dst, uint32_t out_w, uint32_t out_h, uint32_t color) {
+	uint32_t word = color & 0xffffffu;
+	uint32_t *px = (uint32_t *)dst;
+	uint64_t count = (uint64_t)out_w * out_h;
+	for (uint64_t i = 0; i < count; i++) {
+		px[i] = word;
+	}
+}
+
+static void blit_placement(const struct caramel_image *src,
+	const struct caramel_placement *place, uint32_t out_w, uint8_t *dst) {
+	for (uint32_t ly = 0; ly < place->dst.h; ly++) {
+		uint32_t oy = place->dst.y + ly;
+		uint8_t *out_row = dst + (uint64_t)oy * out_w * BYTES_PER_PIXEL;
+		for (uint32_t lx = 0; lx < place->dst.w; lx++) {
+			uint32_t ox = place->dst.x + lx;
+			sample_box(src, &place->src, place->dst.w, place->dst.h,
+				lx, ly,
+				out_row + (uint64_t)ox * BYTES_PER_PIXEL);
+		}
+	}
+}
+
+static void render_tile(const struct caramel_image *src, uint32_t out_w,
 	uint32_t out_h, uint8_t *dst) {
+	for (uint32_t oy = 0; oy < out_h; oy++) {
+		uint32_t sy = oy % src->height;
+		const uint8_t *src_row = src->pixels + (uint64_t)sy *
+							       src->width *
+							       BYTES_PER_PIXEL;
+		uint8_t *out_row = dst + (uint64_t)oy * out_w * BYTES_PER_PIXEL;
+		for (uint32_t ox = 0; ox < out_w; ox++) {
+			uint32_t sx = ox % src->width;
+			memcpy(out_row + (uint64_t)ox * BYTES_PER_PIXEL,
+				src_row + (uint64_t)sx * BYTES_PER_PIXEL,
+				BYTES_PER_PIXEL);
+		}
+	}
+}
+
+bool caramel_image_render(const struct caramel_image *src, enum caramel_fit fit,
+	uint32_t out_w, uint32_t out_h, uint32_t color, uint8_t *dst) {
 	if (src->pixels == NULL || src->width == 0 || src->height == 0 ||
 		out_w == 0 || out_h == 0) {
 		return false;
 	}
 
-	struct caramel_rect crop;
-	caramel_cover_rect(src->width, src->height, out_w, out_h, &crop);
-
-	for (uint32_t oy = 0; oy < out_h; oy++) {
-		uint8_t *out_row = dst + (uint64_t)oy * out_w * BYTES_PER_PIXEL;
-		for (uint32_t ox = 0; ox < out_w; ox++) {
-			sample_box(src, &crop, out_w, out_h, ox, oy,
-				out_row + (uint64_t)ox * BYTES_PER_PIXEL);
-		}
+	struct caramel_placement place;
+	switch (fit) {
+	case CARAMEL_FIT_TILE:
+		render_tile(src, out_w, out_h, dst);
+		return true;
+	case CARAMEL_FIT_CONTAIN:
+		fill_color(dst, out_w, out_h, color);
+		caramel_contain_rects(
+			src->width, src->height, out_w, out_h, &place);
+		break;
+	case CARAMEL_FIT_CENTER:
+		fill_color(dst, out_w, out_h, color);
+		caramel_center_rects(
+			src->width, src->height, out_w, out_h, &place);
+		break;
+	case CARAMEL_FIT_COVER:
+	default:
+		place.dst = (struct caramel_rect){0, 0, out_w, out_h};
+		caramel_cover_rect(
+			src->width, src->height, out_w, out_h, &place.src);
+		break;
 	}
+
+	blit_placement(src, &place, out_w, dst);
 	return true;
 }

@@ -49,6 +49,20 @@ static int test_defaults_when_empty(void) {
 	return 0;
 }
 
+static int test_fit_modes(void) {
+	struct caramel_config cfg;
+	char err[256];
+	CHECK(parse("fit = \"contain\"\n", &cfg, err, sizeof(err)));
+	CHECK(cfg.fit == CARAMEL_FIT_CONTAIN);
+	CHECK(parse("fit = \"center\"\n", &cfg, err, sizeof(err)));
+	CHECK(cfg.fit == CARAMEL_FIT_CENTER);
+	CHECK(parse("fit = \"tile\"\n", &cfg, err, sizeof(err)));
+	CHECK(cfg.fit == CARAMEL_FIT_TILE);
+	CHECK(!parse("fit = \"stretch\"\n", &cfg, err, sizeof(err)));
+	CHECK(strstr(err, "fit must be") != NULL);
+	return 0;
+}
+
 static int test_unknown_key_fails(void) {
 	struct caramel_config cfg;
 	char err[256];
@@ -105,6 +119,7 @@ static int test_bad_sections_fail(void) {
 int main(void) {
 	int rc = 0;
 	rc |= test_full_config();
+	rc |= test_fit_modes();
 	rc |= test_defaults_when_empty();
 	rc |= test_unknown_key_fails();
 	rc |= test_bad_color_fails();

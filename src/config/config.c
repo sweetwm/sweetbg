@@ -7,6 +7,20 @@
 #define DEFAULT_COLOR 0x1e1e2e
 #define CONFIG_LINE_MAX (PATH_MAX + 64)
 
+const char *caramel_fit_name(enum caramel_fit fit) {
+	switch (fit) {
+	case CARAMEL_FIT_CONTAIN:
+		return "contain";
+	case CARAMEL_FIT_CENTER:
+		return "center";
+	case CARAMEL_FIT_TILE:
+		return "tile";
+	case CARAMEL_FIT_COVER:
+		break;
+	}
+	return "cover";
+}
+
 void caramel_config_defaults(struct caramel_config *cfg) {
 	cfg->image[0] = '\0';
 	cfg->color = DEFAULT_COLOR;
@@ -105,12 +119,21 @@ static bool apply_pair(struct caramel_config *cfg, const char *key,
 		return true;
 	}
 	if (strcmp(key, "fit") == 0) {
-		if (strcmp(text, "cover") != 0) {
-			snprintf(err, err_size, "%s:%d: fit must be \"cover\"",
+		if (strcmp(text, "cover") == 0) {
+			cfg->fit = CARAMEL_FIT_COVER;
+		} else if (strcmp(text, "contain") == 0) {
+			cfg->fit = CARAMEL_FIT_CONTAIN;
+		} else if (strcmp(text, "center") == 0) {
+			cfg->fit = CARAMEL_FIT_CENTER;
+		} else if (strcmp(text, "tile") == 0) {
+			cfg->fit = CARAMEL_FIT_TILE;
+		} else {
+			snprintf(err, err_size,
+				"%s:%d: fit must be \"cover\", \"contain\", "
+				"\"center\", or \"tile\"",
 				name, line);
 			return false;
 		}
-		cfg->fit = CARAMEL_FIT_COVER;
 		return true;
 	}
 

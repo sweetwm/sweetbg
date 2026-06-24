@@ -32,9 +32,9 @@ parses arguments, sends one request, prints the response, and returns.
 	_<name>=<path>_ form).
 
 *query*
-	Print the current default wallpaper (image path or placeholder color)
-	followed by one line per output with its name, resolution, scale, and
-	any per-output override.
+	Print the current default wallpaper (image path or placeholder color) and
+	the active fit mode, followed by one line per output with its name,
+	resolution, scale, and any per-output override.
 
 *stop*
 	Ask the running daemon to exit.

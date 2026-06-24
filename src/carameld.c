@@ -28,6 +28,7 @@ struct daemon {
 	struct wl_display *display;
 	struct caramel_registry *reg;
 	uint32_t color;
+	enum caramel_fit fit;
 	char default_path[PATH_MAX];
 	struct assignment assignments[MAX_ASSIGNMENTS];
 	size_t assignment_count;
@@ -262,6 +263,8 @@ static uint8_t handle_query(
 		append_line(message, message_size, &off,
 			"default: color #%06x\n", daemon->color & 0xffffffu);
 	}
+	append_line(message, message_size, &off, "fit: %s\n",
+		caramel_fit_name(daemon->fit));
 
 	struct caramel_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
@@ -291,6 +294,8 @@ static uint8_t handle_query(
 static uint8_t handle_query_outputs(
 	struct daemon *daemon, char *message, size_t message_size) {
 	size_t off = 0;
+	append_line(message, message_size, &off, "meta %u %u\n",
+		(unsigned)daemon->fit, daemon->color & 0xffffffu);
 	struct caramel_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured || output->name == NULL) {
@@ -405,6 +410,7 @@ static void apply_config(struct daemon *daemon) {
 		fprintf(stderr, "carameld: %s\n", err);
 	}
 	daemon->color = cfg.color;
+	daemon->fit = cfg.fit;
 
 	if (cfg.image[0] != '\0') {
 		if (access(cfg.image, R_OK) == 0) {

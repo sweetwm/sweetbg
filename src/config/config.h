@@ -9,7 +9,12 @@
 
 enum caramel_fit {
 	CARAMEL_FIT_COVER,
+	CARAMEL_FIT_CONTAIN,
+	CARAMEL_FIT_CENTER,
+	CARAMEL_FIT_TILE,
 };
+
+const char *caramel_fit_name(enum caramel_fit fit);
 
 #define CARAMEL_CONFIG_MAX_OUTPUTS 16
 

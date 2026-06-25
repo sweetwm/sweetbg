@@ -257,8 +257,7 @@ bool caramel_config_parse(FILE *fp, const char *name,
 	return true;
 }
 
-// Build the config path, preferring XDG_CONFIG_HOME over ~/.config
-static bool config_path(char *out, size_t out_size) {
+bool caramel_config_path(char *out, size_t out_size) {
 	const char *xdg = getenv("XDG_CONFIG_HOME");
 	if (xdg != NULL && xdg[0] != '\0') {
 		int n = snprintf(out, out_size, "%s/caramel/config.toml", xdg);
@@ -278,7 +277,7 @@ bool caramel_config_load(
 	caramel_config_defaults(cfg);
 
 	char path[PATH_MAX];
-	if (!config_path(path, sizeof(path))) {
+	if (!caramel_config_path(path, sizeof(path))) {
 		return true;
 	}
 

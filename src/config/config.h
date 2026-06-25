@@ -37,4 +37,6 @@ bool caramel_config_load(
 bool caramel_config_parse(FILE *fp, const char *name,
 	struct caramel_config *cfg, char *err, size_t err_size);
 
+bool caramel_config_path(char *out, size_t out_size);
+
 #endif

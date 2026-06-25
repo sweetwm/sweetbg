@@ -24,3 +24,13 @@ test_config = executable(
 )
 
 test('config parser', test_config)
+
+test_config_write = executable(
+	'test-config-write',
+	'test_config_write.c',
+	'../src/config/config_write.c',
+	'../src/config/config.c',
+	include_directories: caramel_inc,
+)
+
+test('config writer', test_config_write)

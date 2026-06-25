@@ -31,6 +31,9 @@ parses arguments, sends one request, prints the response, and returns.
 	Set <path> on the single output <name> only (equivalent to the
 	_<name>=<path>_ form).
 
+	Pass *--persist* with any *img* form to also save the wallpaper to the
+	config file (see *caramel*(5)) so it is restored on the next start.
+
 *query*
 	Print the current default wallpaper (image path or placeholder color) and
 	the active fit mode, followed by one line per output with its name,
@@ -43,6 +46,11 @@ parses arguments, sends one request, prints the response, and returns.
 
 *-o*, *--output* <name>
 	Restrict *img* to a single output.
+
+*-p*, *--persist*
+	Save the applied *img* wallpaper to the config file. Updates only the
+	targeted scope (top-level default or the matching _[output.<name>]_
+	section) and preserves other keys, comments, and sections.
 
 *-h*, *--help*
 	Show usage and exit.

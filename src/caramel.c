@@ -5,12 +5,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "config/config_write.h"
 #include "ipc/client.h"
 #include "ipc/protocol.h"
 
 #define MAX_IMG_OVERRIDES 16
 
-static int cmd_img(const char *arg, const char *output) {
+static int cmd_img(const char *arg, const char *output, bool persist) {
 	char resolved[PATH_MAX];
 	if (realpath(arg, resolved) == NULL) {
 		fprintf(stderr, "caramel: cannot use '%s': %s\n", arg,
@@ -21,7 +22,18 @@ static int cmd_img(const char *arg, const char *output) {
 		fprintf(stderr, "caramel: invalid --output name\n");
 		return 2;
 	}
-	return caramel_client_set_image(resolved, output);
+	int rc = caramel_client_set_image(resolved, output);
+	if (rc != 0 || !persist) {
+		return rc;
+	}
+	char err[256];
+	if (!caramel_config_persist_image(output, resolved, err, sizeof(err))) {
+		fprintf(stderr,
+			"caramel: applied but could not save config: %s\n",
+			err);
+		return 1;
+	}
+	return 0;
 }
 
 struct img_override {
@@ -45,11 +57,16 @@ static bool is_override_token(const char *arg, struct img_override *out) {
 static int run_img(int argc, char **argv) {
 	const char *default_path = NULL;
 	const char *flag_output = NULL;
+	bool persist = false;
 	struct img_override overrides[MAX_IMG_OVERRIDES];
 	int override_count = 0;
 
 	for (int i = 2; i < argc; i++) {
 		const char *a = argv[i];
+		if (strcmp(a, "-p") == 0 || strcmp(a, "--persist") == 0) {
+			persist = true;
+			continue;
+		}
 		if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
 			if (i + 1 >= argc) {
 				fprintf(stderr,
@@ -92,7 +109,7 @@ static int run_img(int argc, char **argv) {
 					"arguments\n");
 			return 2;
 		}
-		return cmd_img(default_path, flag_output);
+		return cmd_img(default_path, flag_output, persist);
 	}
 
 	if (default_path == NULL && override_count == 0) {
@@ -104,7 +121,7 @@ static int run_img(int argc, char **argv) {
 
 	int rc = 0;
 	if (default_path != NULL) {
-		rc |= cmd_img(default_path, NULL);
+		rc |= cmd_img(default_path, NULL, persist);
 	}
 	for (int i = 0; i < override_count; i++) {
 		char name[64];
@@ -115,7 +132,7 @@ static int run_img(int argc, char **argv) {
 		}
 		memcpy(name, overrides[i].name, overrides[i].name_len);
 		name[overrides[i].name_len] = '\0';
-		rc |= cmd_img(overrides[i].path, name);
+		rc |= cmd_img(overrides[i].path, name, persist);
 	}
 	return rc;
 }
@@ -129,6 +146,10 @@ static void usage(FILE *out) {
 	      "  img <path> --output <name> set the wallpaper on one output\n"
 	      "  query                      print daemon and output status\n"
 	      "  stop                       stop the running daemon\n"
+	      "\n"
+	      "img options:\n"
+	      "  -o, --output <name>  target a single output\n"
+	      "  -p, --persist        also save the wallpaper to the config\n"
 	      "\n"
 	      "options:\n"
 	      "  -h, --help     show this help and exit\n"

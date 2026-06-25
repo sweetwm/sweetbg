@@ -48,6 +48,8 @@ executable(
 	'src/image/png.c',
 	'src/image/jpeg.c',
 	'src/image/webp.c',
+	'src/config/config.c',
+	'src/config/config_write.c',
 	include_directories: caramel_inc,
 	link_with: ipc_proto,
 	dependencies: [libpng, libjpeg, libwebp],

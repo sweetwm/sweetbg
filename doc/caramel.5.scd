@@ -12,7 +12,9 @@ hot reload, so restart the daemon to apply edits.
 
 A missing file uses safe defaults. A malformed file is reported with its path
 and line number, and the daemon continues with defaults rather than failing to
-start. A runtime *caramel img* change is not written back to this file.
+start. A runtime *caramel img* change is not written back to this file unless
+*--persist* is given (see *caramel*(1)), which rewrites only the affected
+setting and preserves other keys, comments, and sections.
 
 The format is a small subset of TOML: top-level _key = "value"_ entries with
 double-quoted string values, _#_ comments (including trailing comments), and

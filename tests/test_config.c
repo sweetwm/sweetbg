@@ -114,6 +114,7 @@ static int test_per_output_sections(void) {
 	const char *text = "image = \"/default.jpg\"\n"
 			   "[output.DP-1]\n"
 			   "image = \"/left.jpg\"\n"
+			   "fit = \"contain\"\n"
 			   "[output.HDMI-A-1]  # the tv\n"
 			   "image = \"/tv.png\"\n";
 	CHECK(parse(text, &cfg, err, sizeof(err)));
@@ -121,8 +122,11 @@ static int test_per_output_sections(void) {
 	CHECK(cfg.output_count == 2);
 	CHECK(strcmp(cfg.outputs[0].name, "DP-1") == 0);
 	CHECK(strcmp(cfg.outputs[0].image, "/left.jpg") == 0);
+	CHECK(cfg.outputs[0].has_fit);
+	CHECK(cfg.outputs[0].fit == CARAMEL_FIT_CONTAIN);
 	CHECK(strcmp(cfg.outputs[1].name, "HDMI-A-1") == 0);
 	CHECK(strcmp(cfg.outputs[1].image, "/tv.png") == 0);
+	CHECK(!cfg.outputs[1].has_fit);
 	return 0;
 }
 
@@ -133,6 +137,8 @@ static int test_bad_sections_fail(void) {
 	CHECK(!parse("[output.DP-1\n", &cfg, err, sizeof(err)));
 	CHECK(!parse("[output.DP-1]\ncolor = \"#ffffff\"\n", &cfg, err,
 		sizeof(err)));
+	CHECK(!parse(
+		"[output.DP-1]\nfit = \"stretch\"\n", &cfg, err, sizeof(err)));
 	return 0;
 }
 

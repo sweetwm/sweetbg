@@ -16,10 +16,11 @@ color = "#1e1e2e"
 #   tile    - repeat at native size across the output
 fit = "cover"
 
-# Per-output wallpapers override the default above for a single output.
+# Per-output sections override defaults for a single output.
 # The name is what `caramel query` reports (e.g. DP-1, HDMI-A-1).
 # [output.DP-1]
 # image = "/home/me/Pictures/left.jpg"
+# fit = "contain"
 #
 # [output.HDMI-A-1]
 # image = "/home/me/Pictures/tv.png"

@@ -20,6 +20,9 @@
 struct assignment {
 	char name[64];
 	char path[PATH_MAX];
+	enum caramel_fit fit;
+	bool has_image;
+	bool has_fit;
 };
 
 #define MAX_ASSIGNMENTS 16
@@ -41,36 +44,100 @@ static void handle_signal(int signal_number) {
 	g_running = 0;
 }
 
-static const char *assignment_for(
+static struct assignment *assignment_for(
+	struct daemon *daemon, const char *name) {
+	if (name == NULL) {
+		return NULL;
+	}
+	for (size_t i = 0; i < daemon->assignment_count; i++) {
+		if (strcmp(daemon->assignments[i].name, name) == 0) {
+			return &daemon->assignments[i];
+		}
+	}
+	return NULL;
+}
+
+static const struct assignment *const_assignment_for(
 	const struct daemon *daemon, const char *name) {
 	if (name == NULL) {
 		return NULL;
 	}
 	for (size_t i = 0; i < daemon->assignment_count; i++) {
 		if (strcmp(daemon->assignments[i].name, name) == 0) {
-			return daemon->assignments[i].path;
+			return &daemon->assignments[i];
 		}
 	}
 	return NULL;
 }
 
-static void set_assignment(
-	struct daemon *daemon, const char *name, const char *path) {
-	for (size_t i = 0; i < daemon->assignment_count; i++) {
-		if (strcmp(daemon->assignments[i].name, name) == 0) {
-			snprintf(daemon->assignments[i].path,
-				sizeof(daemon->assignments[i].path), "%s",
-				path);
-			return;
-		}
+static struct assignment *ensure_assignment(
+	struct daemon *daemon, const char *name) {
+	struct assignment *entry = assignment_for(daemon, name);
+	if (entry != NULL) {
+		return entry;
 	}
 	if (daemon->assignment_count >= MAX_ASSIGNMENTS) {
+		return NULL;
+	}
+	entry = &daemon->assignments[daemon->assignment_count++];
+	memset(entry, 0, sizeof(*entry));
+	snprintf(entry->name, sizeof(entry->name), "%s", name);
+	return entry;
+}
+
+static void set_image_assignment(
+	struct daemon *daemon, const char *name, const char *path) {
+	struct assignment *entry = ensure_assignment(daemon, name);
+	if (entry == NULL) {
 		return;
 	}
-	struct assignment *entry =
-		&daemon->assignments[daemon->assignment_count++];
-	snprintf(entry->name, sizeof(entry->name), "%s", name);
 	snprintf(entry->path, sizeof(entry->path), "%s", path);
+	entry->has_image = true;
+}
+
+static void set_fit_assignment(
+	struct daemon *daemon, const char *name, enum caramel_fit fit) {
+	struct assignment *entry = ensure_assignment(daemon, name);
+	if (entry == NULL) {
+		return;
+	}
+	entry->fit = fit;
+	entry->has_fit = true;
+}
+
+static void compact_assignments(struct daemon *daemon) {
+	size_t out = 0;
+	for (size_t i = 0; i < daemon->assignment_count; i++) {
+		if (!daemon->assignments[i].has_image &&
+			!daemon->assignments[i].has_fit) {
+			continue;
+		}
+		if (out != i) {
+			daemon->assignments[out] = daemon->assignments[i];
+		}
+		out++;
+	}
+	daemon->assignment_count = out;
+}
+
+static void clear_image_assignments(struct daemon *daemon) {
+	for (size_t i = 0; i < daemon->assignment_count; i++) {
+		daemon->assignments[i].has_image = false;
+		daemon->assignments[i].path[0] = '\0';
+	}
+	compact_assignments(daemon);
+}
+
+static bool clear_fit_assignments(struct daemon *daemon) {
+	bool changed = false;
+	for (size_t i = 0; i < daemon->assignment_count; i++) {
+		if (daemon->assignments[i].has_fit) {
+			daemon->assignments[i].has_fit = false;
+			changed = true;
+		}
+	}
+	compact_assignments(daemon);
+	return changed;
 }
 
 static bool ensure_surfaces(struct caramel_registry *reg) {
@@ -92,8 +159,18 @@ static bool ensure_surfaces(struct caramel_registry *reg) {
 
 static const char *effective_path(
 	const struct daemon *daemon, const struct caramel_output *output) {
-	const char *assigned = assignment_for(daemon, output->name);
-	return assigned != NULL ? assigned : daemon->default_path;
+	const struct assignment *assigned =
+		const_assignment_for(daemon, output->name);
+	return assigned != NULL && assigned->has_image ? assigned->path
+						       : daemon->default_path;
+}
+
+static enum caramel_fit effective_fit(
+	const struct daemon *daemon, const struct caramel_output *output) {
+	const struct assignment *assigned =
+		const_assignment_for(daemon, output->name);
+	return assigned != NULL && assigned->has_fit ? assigned->fit
+						     : daemon->fit;
 }
 
 static void client_binary(char *out, size_t out_size) {
@@ -227,9 +304,9 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	// Update remembered assignments unless this is a daemon-driven repaint
 	if (req.mode == CARAMEL_IMG_DEFAULT) {
 		memcpy(daemon->default_path, req.path, strlen(req.path) + 1);
-		daemon->assignment_count = 0;
+		clear_image_assignments(daemon);
 	} else if (req.mode == CARAMEL_IMG_OVERRIDE) {
-		set_assignment(daemon, req.name, req.path);
+		set_image_assignment(daemon, req.name, req.path);
 	}
 	snprintf(message, message_size, "applied %s to %s", req.path, req.name);
 	return CARAMEL_STATUS_OK;
@@ -271,12 +348,26 @@ static uint8_t handle_query(
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		const char *name =
 			output->name != NULL ? output->name : "(unnamed)";
-		const char *assigned = assignment_for(daemon, output->name);
-		if (assigned != NULL) {
+		const struct assignment *assigned =
+			const_assignment_for(daemon, output->name);
+		const bool has_image = assigned != NULL && assigned->has_image;
+		const bool has_fit = assigned != NULL && assigned->has_fit;
+		if (has_image && has_fit) {
+			append_line(message, message_size, &off,
+				"%s: %dx%d scale %d (override: %s, fit: %s)\n",
+				name, output->pixel_width, output->pixel_height,
+				output->scale, assigned->path,
+				caramel_fit_name(assigned->fit));
+		} else if (has_image) {
 			append_line(message, message_size, &off,
 				"%s: %dx%d scale %d (override: %s)\n", name,
 				output->pixel_width, output->pixel_height,
-				output->scale, assigned);
+				output->scale, assigned->path);
+		} else if (has_fit) {
+			append_line(message, message_size, &off,
+				"%s: %dx%d scale %d (fit: %s)\n", name,
+				output->pixel_width, output->pixel_height,
+				output->scale, caramel_fit_name(assigned->fit));
 		} else {
 			append_line(message, message_size, &off,
 				"%s: %dx%d scale %d\n", name,
@@ -308,8 +399,9 @@ static uint8_t handle_query_outputs(
 		uint32_t ph;
 		caramel_surface_buffer_size(
 			&output->surface, output->scale, &pw, &ph);
-		append_line(message, message_size, &off, "%s %u %u %u\n",
-			output->name, pw, ph, scale);
+		append_line(message, message_size, &off, "%s %u %u %u %u\n",
+			output->name, pw, ph, scale,
+			(unsigned)effective_fit(daemon, output));
 	}
 	if (off > 0 && off <= message_size && message[off - 1] == '\n') {
 		message[off - 1] = '\0';
@@ -323,14 +415,16 @@ static bool fit_uses_color(enum caramel_fit fit) {
 
 static void repaint_after_change(
 	struct daemon *daemon, bool color_changed, bool fit_changed) {
-	bool image_needs =
-		fit_changed || (color_changed && fit_uses_color(daemon->fit));
 	struct caramel_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured) {
 			continue;
 		}
 		bool is_placeholder = effective_path(daemon, output)[0] == '\0';
+		bool image_needs =
+			fit_changed ||
+			(color_changed &&
+				fit_uses_color(effective_fit(daemon, output)));
 		if (is_placeholder ? color_changed : image_needs) {
 			output->surface.needs_repaint = true;
 		}
@@ -338,36 +432,113 @@ static void repaint_after_change(
 	reconcile_paint(daemon);
 }
 
+static struct caramel_output *find_output(
+	struct daemon *daemon, const char *name) {
+	struct caramel_output *output;
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		if (output->name != NULL && strcmp(output->name, name) == 0) {
+			return output;
+		}
+	}
+	return NULL;
+}
+
+static void repaint_output_after_fit(struct daemon *daemon,
+	struct caramel_output *output, enum caramel_fit old_fit) {
+	if (!output->surface.configured) {
+		return;
+	}
+	if (old_fit == effective_fit(daemon, output)) {
+		return;
+	}
+	if (effective_path(daemon, output)[0] == '\0') {
+		return;
+	}
+	output->surface.needs_repaint = true;
+	reconcile_paint(daemon);
+}
+
+struct set_request {
+	uint32_t field;
+	uint32_t value;
+	char output[64];
+};
+
+static bool parse_set(
+	const uint8_t *payload, uint32_t len, struct set_request *req) {
+	if (len != 8 && len < 12) {
+		return false;
+	}
+	req->field = caramel_get_u32(payload);
+	req->value = caramel_get_u32(payload + 4);
+	req->output[0] = '\0';
+	if (len == 8) {
+		return true;
+	}
+	uint32_t output_len = caramel_get_u32(payload + 8);
+	if (output_len == 0 || output_len >= sizeof(req->output) ||
+		12 + output_len != len) {
+		return false;
+	}
+	memcpy(req->output, payload + 12, output_len);
+	req->output[output_len] = '\0';
+	return true;
+}
+
 static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 	uint32_t len, char *message, size_t message_size) {
-	if (len != 8) {
+	struct set_request req;
+	if (!parse_set(payload, len, &req)) {
 		snprintf(message, message_size, "invalid set request");
 		return CARAMEL_STATUS_ERR_BAD_REQUEST;
 	}
-	uint32_t field = caramel_get_u32(payload);
-	uint32_t value = caramel_get_u32(payload + 4);
 
-	if (field == CARAMEL_SET_FIT) {
-		if (value > CARAMEL_FIT_TILE) {
+	if (req.field == CARAMEL_SET_FIT) {
+		if (req.value > CARAMEL_FIT_TILE) {
 			snprintf(message, message_size, "invalid fit mode");
 			return CARAMEL_STATUS_ERR_BAD_REQUEST;
 		}
-		enum caramel_fit fit = (enum caramel_fit)value;
-		if (fit != daemon->fit) {
+		enum caramel_fit fit = (enum caramel_fit)req.value;
+		if (req.output[0] != '\0') {
+			struct caramel_output *output =
+				find_output(daemon, req.output);
+			if (output == NULL) {
+				snprintf(message, message_size,
+					"no output named %s", req.output);
+				return CARAMEL_STATUS_ERR_BAD_REQUEST;
+			}
+			enum caramel_fit old_fit =
+				effective_fit(daemon, output);
+			set_fit_assignment(daemon, req.output, fit);
+			repaint_output_after_fit(daemon, output, old_fit);
+			snprintf(message, message_size, "fit %s for %s",
+				caramel_fit_name(fit), req.output);
+			return CARAMEL_STATUS_OK;
+		}
+		bool changed = fit != daemon->fit;
+		bool cleared = clear_fit_assignments(daemon);
+		if (changed) {
 			daemon->fit = fit;
+		}
+		if (changed || cleared) {
 			repaint_after_change(daemon, false, true);
 		}
 		snprintf(message, message_size, "fit %s",
 			caramel_fit_name(daemon->fit));
 		return CARAMEL_STATUS_OK;
 	}
-	if (field == CARAMEL_SET_COLOR) {
-		if (value > 0xffffffu) {
+	if (req.field == CARAMEL_SET_COLOR) {
+		if (req.output[0] != '\0') {
+			snprintf(message, message_size,
+				"color cannot be scoped to an output");
+			return CARAMEL_STATUS_ERR_BAD_REQUEST;
+		}
+		if (req.value > 0xffffffu) {
 			snprintf(message, message_size, "invalid color");
 			return CARAMEL_STATUS_ERR_BAD_REQUEST;
 		}
-		if (value != daemon->color) {
-			daemon->color = value;
+		if (req.value != daemon->color) {
+			daemon->color = req.value;
 			repaint_after_change(daemon, true, false);
 		}
 		snprintf(message, message_size, "color #%06x",
@@ -491,14 +662,18 @@ static void apply_config(struct daemon *daemon) {
 
 	for (size_t i = 0; i < cfg.output_count; i++) {
 		const struct caramel_config_output *out = &cfg.outputs[i];
-		if (out->image[0] == '\0') {
-			continue;
+		if (out->has_fit) {
+			set_fit_assignment(daemon, out->name, out->fit);
 		}
-		if (access(out->image, R_OK) == 0) {
-			set_assignment(daemon, out->name, out->image);
-		} else {
-			fprintf(stderr, "carameld: configured image %s: %s\n",
-				out->image, strerror(errno));
+		if (out->image[0] != '\0') {
+			if (access(out->image, R_OK) == 0) {
+				set_image_assignment(
+					daemon, out->name, out->image);
+			} else {
+				fprintf(stderr,
+					"carameld: configured image %s: %s\n",
+					out->image, strerror(errno));
+			}
 		}
 	}
 }

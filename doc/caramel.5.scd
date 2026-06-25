@@ -47,10 +47,11 @@ These top-level keys set the defaults applied to every output:
 
 # PER-OUTPUT SECTIONS
 
-An _[output.NAME]_ section sets the wallpaper for one output, overriding the
-default _image_. NAME is the output name shown by *caramel query* (for example
-_DP-1_ or _HDMI-A-1_). The only key supported in a section is *image*. An output
-without a matching section uses the top-level default.
+An _[output.NAME]_ section sets wallpaper choices for one output. NAME is the
+output name shown by *caramel query* (for example _DP-1_ or _HDMI-A-1_). The
+supported keys are *image* and *fit*, and each key overrides only that
+top-level default. An output without a matching section uses the top-level
+defaults.
 
 # EXAMPLE
 
@@ -61,6 +62,7 @@ fit   = "cover"
 
 [output.DP-1]
 image = "/home/me/Pictures/left.jpg"
+fit = "contain"
 
 [output.HDMI-A-1]
 image = "/home/me/Pictures/tv.png"

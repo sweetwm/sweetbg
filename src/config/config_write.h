@@ -13,7 +13,14 @@ bool caramel_config_persist_image(const char *output_name,
 bool caramel_config_patch_setting(const char *input, const char *key,
 	const char *value, char **out, char *err, size_t err_size);
 
+bool caramel_config_patch_output_setting(const char *input,
+	const char *output_name, const char *key, const char *value, char **out,
+	char *err, size_t err_size);
+
 bool caramel_config_persist_setting(
+	const char *key, const char *value, char *err, size_t err_size);
+
+bool caramel_config_persist_output_setting(const char *output_name,
 	const char *key, const char *value, char *err, size_t err_size);
 
 #endif

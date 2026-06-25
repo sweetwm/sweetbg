@@ -12,6 +12,10 @@
 
 #define MAX_IMG_OVERRIDES 16
 
+static bool valid_output_arg(const char *output) {
+	return output != NULL && output[0] != '\0' && strlen(output) <= 63;
+}
+
 static int cmd_img(const char *arg, const char *output, bool persist) {
 	char resolved[PATH_MAX];
 	if (realpath(arg, resolved) == NULL) {
@@ -19,7 +23,7 @@ static int cmd_img(const char *arg, const char *output, bool persist) {
 			strerror(errno));
 		return 1;
 	}
-	if (output != NULL && (output[0] == '\0' || strlen(output) > 63)) {
+	if (output != NULL && !valid_output_arg(output)) {
 		fprintf(stderr, "caramel: invalid --output name\n");
 		return 2;
 	}
@@ -141,11 +145,21 @@ static int run_img(int argc, char **argv) {
 static int cmd_set(int argc, char **argv) {
 	const char *field = NULL;
 	const char *value = NULL;
+	const char *output = NULL;
 	bool persist = false;
 	for (int i = 2; i < argc; i++) {
 		const char *a = argv[i];
 		if (strcmp(a, "-p") == 0 || strcmp(a, "--persist") == 0) {
 			persist = true;
+		} else if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
+			if (i + 1 >= argc) {
+				fprintf(stderr,
+					"caramel: --output needs a name\n");
+				return 2;
+			}
+			output = argv[++i];
+		} else if (strncmp(a, "--output=", 9) == 0) {
+			output = a + 9;
 		} else if (field == NULL) {
 			field = a;
 		} else if (value == NULL) {
@@ -157,7 +171,12 @@ static int cmd_set(int argc, char **argv) {
 	}
 	if (field == NULL || value == NULL) {
 		fprintf(stderr, "usage: caramel set fit <mode> | "
-				"color <#rrggbb> [--persist]\n");
+				"color <#rrggbb> [--output <name>] "
+				"[--persist]\n");
+		return 2;
+	}
+	if (output != NULL && !valid_output_arg(output)) {
+		fprintf(stderr, "caramel: invalid --output name\n");
 		return 2;
 	}
 
@@ -176,6 +195,11 @@ static int cmd_set(int argc, char **argv) {
 		set_value = (uint32_t)fit;
 		persist_value = caramel_fit_name(fit);
 	} else if (strcmp(field, "color") == 0) {
+		if (output != NULL) {
+			fprintf(stderr, "caramel: color cannot be scoped to an "
+					"output\n");
+			return 2;
+		}
 		uint32_t color;
 		if (!caramel_config_parse_color(value, &color)) {
 			fprintf(stderr, "caramel: color must be \"#rrggbb\"\n");
@@ -192,17 +216,28 @@ static int cmd_set(int argc, char **argv) {
 		return 2;
 	}
 
-	uint8_t payload[8];
+	uint8_t payload[12 + 63];
 	caramel_put_u32(payload, set_field);
 	caramel_put_u32(payload + 4, set_value);
-	int rc = caramel_client_request(
-		CARAMEL_CMD_SET, payload, sizeof(payload));
+	uint32_t payload_len = 8;
+	if (output != NULL) {
+		size_t output_len = strlen(output);
+		caramel_put_u32(payload + 8, (uint32_t)output_len);
+		// NOLINTNEXTLINE(bugprone-not-null-terminated-result)
+		memcpy(payload + 12, output, output_len);
+		payload_len = (uint32_t)(12 + output_len);
+	}
+	int rc = caramel_client_request(CARAMEL_CMD_SET, payload, payload_len);
 	if (rc != 0 || !persist) {
 		return rc;
 	}
 	char err[256];
-	if (!caramel_config_persist_setting(
-		    field, persist_value, err, sizeof(err))) {
+	bool saved = output == NULL
+			     ? caramel_config_persist_setting(
+				       field, persist_value, err, sizeof(err))
+			     : caramel_config_persist_output_setting(output,
+				       field, persist_value, err, sizeof(err));
+	if (!saved) {
 		fprintf(stderr,
 			"caramel: applied but could not save config: %s\n",
 			err);
@@ -220,12 +255,14 @@ static void usage(FILE *out) {
 	      "  img <path> --output <name> set the wallpaper on one output\n"
 	      "  set fit <mode>             set fit: "
 	      "cover|contain|center|tile\n"
+	      "  set fit <mode> --output <name>\n"
+	      "                             set fit on one output\n"
 	      "  set color <#rrggbb>        set the background color\n"
 	      "  query                      print daemon and output status\n"
 	      "  stop                       stop the running daemon\n"
 	      "\n"
 	      "img/set options:\n"
-	      "  -o, --output <name>  target a single output (img only)\n"
+	      "  -o, --output <name>  target a single output\n"
 	      "  -p, --persist        also save the change to the config\n"
 	      "\n"
 	      "options:\n"

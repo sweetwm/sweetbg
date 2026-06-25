@@ -90,6 +90,7 @@ struct output_info {
 	uint32_t width;
 	uint32_t height;
 	int32_t scale;
+	enum caramel_fit fit;
 };
 
 static int query_outputs(struct output_info *list, int max,
@@ -143,6 +144,7 @@ static int query_outputs(struct output_info *list, int max,
 		const char *ws = strtok_r(NULL, " ", &field_save);
 		const char *hs = strtok_r(NULL, " ", &field_save);
 		const char *ss = strtok_r(NULL, " ", &field_save);
+		const char *fs = strtok_r(NULL, " ", &field_save);
 		if (name == NULL || ws == NULL || hs == NULL || ss == NULL ||
 			strlen(name) >= sizeof(list[count].name)) {
 			continue;
@@ -162,6 +164,14 @@ static int query_outputs(struct output_info *list, int max,
 		list[count].width = (uint32_t)w;
 		list[count].height = (uint32_t)h;
 		list[count].scale = (int32_t)s;
+		list[count].fit = *fit;
+		if (fs != NULL) {
+			char *end_f;
+			unsigned long f = strtoul(fs, &end_f, 10);
+			if (*end_f == '\0' && f <= CARAMEL_FIT_TILE) {
+				list[count].fit = (enum caramel_fit)f;
+			}
+		}
 		count++;
 	}
 	return count;
@@ -280,7 +290,7 @@ int caramel_client_set_image(const char *path, const char *output) {
 			continue;
 		}
 		int memfd = prepare_memfd(&image, outputs[i].width,
-			outputs[i].height, fit, color);
+			outputs[i].height, outputs[i].fit, color);
 		if (memfd < 0) {
 			fprintf(stderr, "caramel: failed to prepare %s\n",
 				outputs[i].name);
@@ -336,7 +346,7 @@ int caramel_client_prepare_output(const char *name, const char *path) {
 	}
 
 	int memfd = prepare_memfd(
-		&image, target->width, target->height, fit, color);
+		&image, target->width, target->height, target->fit, color);
 	int rc = 1;
 	if (memfd >= 0) {
 		rc = send_prepared(target, CARAMEL_IMG_REPAINT, path, memfd);

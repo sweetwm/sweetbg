@@ -18,7 +18,7 @@ parses arguments, sends one request, prints the response, and returns.
 
 *img* <path>
 	Set <path> (JPEG, PNG, or WebP) as the default wallpaper on every
-	output, including outputs connected later, clearing any per-output
+	output, including outputs connected later, clearing any per-output image
 	overrides. Paths are resolved to absolute paths before being sent.
 
 *img* <name>=<path> [<name>=<path> ...]
@@ -36,7 +36,13 @@ parses arguments, sends one request, prints the response, and returns.
 
 *set fit* <mode>
 	Change the fit mode at runtime to _cover_, _contain_, _center_, or
-	_tile_, repainting the affected outputs.
+	_tile_, repainting the affected outputs. Without *--output*, this sets
+	the default fit mode for every output and clears runtime per-output fit
+	overrides.
+
+*set fit* <mode> *--output* <name>
+	Change the fit mode for the single output <name>. Other outputs keep
+	using either their own override or the default fit mode.
 
 *set color* <#rrggbb>
 	Change the background color at runtime. It is shown before an image is
@@ -47,7 +53,7 @@ parses arguments, sends one request, prints the response, and returns.
 
 *query*
 	Print the current default wallpaper (image path or placeholder color) and
-	the active fit mode, followed by one line per output with its name,
+	the default fit mode, followed by one line per output with its name,
 	resolution, scale, and any per-output override.
 
 *stop*
@@ -56,7 +62,7 @@ parses arguments, sends one request, prints the response, and returns.
 # OPTIONS
 
 *-o*, *--output* <name>
-	Restrict *img* to a single output.
+	Restrict *img* or *set fit* to a single output.
 
 *-p*, *--persist*
 	Save the applied *img* or *set* change to the config file. Updates only

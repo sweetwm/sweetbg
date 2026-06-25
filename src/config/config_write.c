@@ -20,6 +20,9 @@ static bool valid_value(const char *s) {
 }
 
 static bool valid_output_name(const char *s) {
+	if (s == NULL) {
+		return false;
+	}
 	size_t len = strlen(s);
 	if (len == 0 || len >= 64) {
 		return false;
@@ -211,6 +214,18 @@ bool caramel_config_patch_setting(const char *input, const char *key,
 	return patch_key(input, NULL, key, value, out, err, err_size);
 }
 
+bool caramel_config_patch_output_setting(const char *input,
+	const char *output_name, const char *key, const char *value, char **out,
+	char *err, size_t err_size) {
+	if (!valid_output_name(output_name)) {
+		snprintf(err, err_size, "invalid output name");
+		return false;
+	}
+	char section[SECTION_NAME_MAX];
+	snprintf(section, sizeof(section), "output.%s", output_name);
+	return patch_key(input, section, key, value, out, err, err_size);
+}
+
 static bool read_config(
 	const char *path, char **out, char *err, size_t err_size) {
 	*out = NULL;
@@ -364,4 +379,15 @@ bool caramel_config_persist_image(const char *output_name,
 bool caramel_config_persist_setting(
 	const char *key, const char *value, char *err, size_t err_size) {
 	return persist_core(NULL, key, value, err, err_size);
+}
+
+bool caramel_config_persist_output_setting(const char *output_name,
+	const char *key, const char *value, char *err, size_t err_size) {
+	if (!valid_output_name(output_name)) {
+		snprintf(err, err_size, "invalid output name");
+		return false;
+	}
+	char section[SECTION_NAME_MAX];
+	snprintf(section, sizeof(section), "output.%s", output_name);
+	return persist_core(section, key, value, err, err_size);
 }

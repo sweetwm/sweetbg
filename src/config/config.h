@@ -25,6 +25,8 @@ bool caramel_config_parse_color(const char *s, uint32_t *out);
 struct caramel_config_output {
 	char name[64];
 	char image[PATH_MAX];
+	enum caramel_fit fit;
+	bool has_fit;
 };
 
 struct caramel_config {

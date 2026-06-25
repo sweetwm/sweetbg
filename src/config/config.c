@@ -160,6 +160,17 @@ static bool apply_output_pair(struct caramel_config_output *output,
 		memcpy(output->image, text, strlen(text) + 1);
 		return true;
 	}
+	if (strcmp(key, "fit") == 0) {
+		if (!caramel_fit_from_name(text, &output->fit)) {
+			snprintf(err, err_size,
+				"%s:%d: fit must be \"cover\", \"contain\", "
+				"\"center\", or \"tile\"",
+				name, line);
+			return false;
+		}
+		output->has_fit = true;
+		return true;
+	}
 	snprintf(err, err_size, "%s:%d: unknown key '%s' in [output]", name,
 		line, key);
 	return false;
@@ -207,6 +218,8 @@ static struct caramel_config_output *parse_section(struct caramel_config *cfg,
 	struct caramel_config_output *out = &cfg->outputs[cfg->output_count++];
 	memcpy(out->name, output_name, strlen(output_name) + 1);
 	out->image[0] = '\0';
+	out->fit = CARAMEL_FIT_COVER;
+	out->has_fit = false;
 	return out;
 }
 

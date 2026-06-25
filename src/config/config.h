@@ -16,6 +16,10 @@ enum caramel_fit {
 
 const char *caramel_fit_name(enum caramel_fit fit);
 
+bool caramel_fit_from_name(const char *name, enum caramel_fit *out);
+
+bool caramel_config_parse_color(const char *s, uint32_t *out);
+
 #define CARAMEL_CONFIG_MAX_OUTPUTS 16
 
 struct caramel_config_output {

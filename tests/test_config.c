@@ -63,6 +63,26 @@ static int test_fit_modes(void) {
 	return 0;
 }
 
+static int test_fit_and_color_parsers(void) {
+	enum caramel_fit fit;
+	CHECK(caramel_fit_from_name("cover", &fit) && fit == CARAMEL_FIT_COVER);
+	CHECK(caramel_fit_from_name("contain", &fit) &&
+		fit == CARAMEL_FIT_CONTAIN);
+	CHECK(caramel_fit_from_name("center", &fit) &&
+		fit == CARAMEL_FIT_CENTER);
+	CHECK(caramel_fit_from_name("tile", &fit) && fit == CARAMEL_FIT_TILE);
+	CHECK(!caramel_fit_from_name("stretch", &fit));
+
+	uint32_t color;
+	CHECK(caramel_config_parse_color("#1e2e3f", &color) &&
+		color == 0x1e2e3f);
+	CHECK(caramel_config_parse_color("#ABCDEF", &color) &&
+		color == 0xabcdef);
+	CHECK(!caramel_config_parse_color("1e2e3f", &color));
+	CHECK(!caramel_config_parse_color("#12345", &color));
+	return 0;
+}
+
 static int test_unknown_key_fails(void) {
 	struct caramel_config cfg;
 	char err[256];
@@ -120,6 +140,7 @@ int main(void) {
 	int rc = 0;
 	rc |= test_full_config();
 	rc |= test_fit_modes();
+	rc |= test_fit_and_color_parsers();
 	rc |= test_defaults_when_empty();
 	rc |= test_unknown_key_fails();
 	rc |= test_bad_color_fails();

@@ -21,6 +21,21 @@ const char *caramel_fit_name(enum caramel_fit fit) {
 	return "cover";
 }
 
+bool caramel_fit_from_name(const char *name, enum caramel_fit *out) {
+	if (strcmp(name, "cover") == 0) {
+		*out = CARAMEL_FIT_COVER;
+	} else if (strcmp(name, "contain") == 0) {
+		*out = CARAMEL_FIT_CONTAIN;
+	} else if (strcmp(name, "center") == 0) {
+		*out = CARAMEL_FIT_CENTER;
+	} else if (strcmp(name, "tile") == 0) {
+		*out = CARAMEL_FIT_TILE;
+	} else {
+		return false;
+	}
+	return true;
+}
+
 void caramel_config_defaults(struct caramel_config *cfg) {
 	cfg->image[0] = '\0';
 	cfg->color = DEFAULT_COLOR;
@@ -79,8 +94,7 @@ static int hex_value(char c) {
 	return -1;
 }
 
-// Parse "#rrggbb" into an XRGB8888 word (0x00RRGGBB)
-static bool parse_color(const char *s, uint32_t *out) {
+bool caramel_config_parse_color(const char *s, uint32_t *out) {
 	if (strlen(s) != 7 || s[0] != '#') {
 		return false;
 	}
@@ -111,7 +125,7 @@ static bool apply_pair(struct caramel_config *cfg, const char *key,
 		return true;
 	}
 	if (strcmp(key, "color") == 0) {
-		if (!parse_color(text, &cfg->color)) {
+		if (!caramel_config_parse_color(text, &cfg->color)) {
 			snprintf(err, err_size,
 				"%s:%d: color must be \"#rrggbb\"", name, line);
 			return false;
@@ -119,15 +133,7 @@ static bool apply_pair(struct caramel_config *cfg, const char *key,
 		return true;
 	}
 	if (strcmp(key, "fit") == 0) {
-		if (strcmp(text, "cover") == 0) {
-			cfg->fit = CARAMEL_FIT_COVER;
-		} else if (strcmp(text, "contain") == 0) {
-			cfg->fit = CARAMEL_FIT_CONTAIN;
-		} else if (strcmp(text, "center") == 0) {
-			cfg->fit = CARAMEL_FIT_CENTER;
-		} else if (strcmp(text, "tile") == 0) {
-			cfg->fit = CARAMEL_FIT_TILE;
-		} else {
+		if (!caramel_fit_from_name(text, &cfg->fit)) {
 			snprintf(err, err_size,
 				"%s:%d: fit must be \"cover\", \"contain\", "
 				"\"center\", or \"tile\"",

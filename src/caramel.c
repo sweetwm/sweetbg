@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "config/config.h"
 #include "config/config_write.h"
 #include "ipc/client.h"
 #include "ipc/protocol.h"
@@ -137,6 +138,79 @@ static int run_img(int argc, char **argv) {
 	return rc;
 }
 
+static int cmd_set(int argc, char **argv) {
+	const char *field = NULL;
+	const char *value = NULL;
+	bool persist = false;
+	for (int i = 2; i < argc; i++) {
+		const char *a = argv[i];
+		if (strcmp(a, "-p") == 0 || strcmp(a, "--persist") == 0) {
+			persist = true;
+		} else if (field == NULL) {
+			field = a;
+		} else if (value == NULL) {
+			value = a;
+		} else {
+			fprintf(stderr, "caramel: set takes <field> <value>\n");
+			return 2;
+		}
+	}
+	if (field == NULL || value == NULL) {
+		fprintf(stderr, "usage: caramel set fit <mode> | "
+				"color <#rrggbb> [--persist]\n");
+		return 2;
+	}
+
+	uint32_t set_field;
+	uint32_t set_value;
+	char canon[16];
+	const char *persist_value;
+	if (strcmp(field, "fit") == 0) {
+		enum caramel_fit fit;
+		if (!caramel_fit_from_name(value, &fit)) {
+			fprintf(stderr, "caramel: fit must be cover, contain, "
+					"center, or tile\n");
+			return 2;
+		}
+		set_field = CARAMEL_SET_FIT;
+		set_value = (uint32_t)fit;
+		persist_value = caramel_fit_name(fit);
+	} else if (strcmp(field, "color") == 0) {
+		uint32_t color;
+		if (!caramel_config_parse_color(value, &color)) {
+			fprintf(stderr, "caramel: color must be \"#rrggbb\"\n");
+			return 2;
+		}
+		set_field = CARAMEL_SET_COLOR;
+		set_value = color;
+		snprintf(canon, sizeof(canon), "#%06x", color & 0xffffffu);
+		persist_value = canon;
+	} else {
+		fprintf(stderr,
+			"caramel: unknown set field '%s' (use fit or color)\n",
+			field);
+		return 2;
+	}
+
+	uint8_t payload[8];
+	caramel_put_u32(payload, set_field);
+	caramel_put_u32(payload + 4, set_value);
+	int rc = caramel_client_request(
+		CARAMEL_CMD_SET, payload, sizeof(payload));
+	if (rc != 0 || !persist) {
+		return rc;
+	}
+	char err[256];
+	if (!caramel_config_persist_setting(
+		    field, persist_value, err, sizeof(err))) {
+		fprintf(stderr,
+			"caramel: applied but could not save config: %s\n",
+			err);
+		return 1;
+	}
+	return 0;
+}
+
 static void usage(FILE *out) {
 	fputs("usage: caramel <command> [args]\n"
 	      "\n"
@@ -144,12 +218,15 @@ static void usage(FILE *out) {
 	      "  img <path>                 set the wallpaper on all outputs\n"
 	      "  img <name>=<path> ...      set a wallpaper per output\n"
 	      "  img <path> --output <name> set the wallpaper on one output\n"
+	      "  set fit <mode>             set fit: "
+	      "cover|contain|center|tile\n"
+	      "  set color <#rrggbb>        set the background color\n"
 	      "  query                      print daemon and output status\n"
 	      "  stop                       stop the running daemon\n"
 	      "\n"
-	      "img options:\n"
-	      "  -o, --output <name>  target a single output\n"
-	      "  -p, --persist        also save the wallpaper to the config\n"
+	      "img/set options:\n"
+	      "  -o, --output <name>  target a single output (img only)\n"
+	      "  -p, --persist        also save the change to the config\n"
 	      "\n"
 	      "options:\n"
 	      "  -h, --help     show this help and exit\n"
@@ -181,6 +258,10 @@ int main(int argc, char **argv) {
 
 	if (strcmp(cmd, "img") == 0) {
 		return run_img(argc, argv);
+	}
+
+	if (strcmp(cmd, "set") == 0) {
+		return cmd_set(argc, argv);
 	}
 
 	if (strcmp(cmd, "prepare") == 0) {

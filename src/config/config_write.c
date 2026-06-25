@@ -66,13 +66,6 @@ static bool is_section(const char *t, char *name_out, size_t out_size) {
 	return true;
 }
 
-static bool section_is_target(const char *secname, const char *output_name) {
-	const char *prefix = "output.";
-	size_t plen = strlen(prefix);
-	return strncmp(secname, prefix, plen) == 0 &&
-	       strcmp(secname + plen, output_name) == 0;
-}
-
 static bool line_has_key(const char *t, const char *key) {
 	if (t[0] == '\0' || t[0] == '#' || t[0] == '[') {
 		return false;
@@ -98,27 +91,24 @@ static void emit(
 	*any = true;
 }
 
-static void emit_image(FILE *ms, const char *path, bool *at_start, bool *any) {
+static void emit_kv(FILE *ms, const char *key, const char *value,
+	bool *at_start, bool *any) {
 	if (!*at_start) {
 		fputc('\n', ms);
 		*at_start = true;
 	}
-	char line[PATH_MAX + 16];
-	int n = snprintf(line, sizeof(line), "image = \"%s\"\n", path);
+	char line[PATH_MAX + 64];
+	int n = snprintf(line, sizeof(line), "%s = \"%s\"\n", key, value);
 	if (n > 0) {
 		emit(ms, line, (size_t)n, at_start, any);
 	}
 }
 
-bool caramel_config_patch_image(const char *input, const char *output_name,
-	const char *image_path, char **out, char *err, size_t err_size) {
-	if (!valid_value(image_path)) {
+static bool patch_key(const char *input, const char *section, const char *key,
+	const char *value, char **out, char *err, size_t err_size) {
+	if (!valid_value(value)) {
 		snprintf(err, err_size,
-			"image path is too long or contains quotes/newlines");
-		return false;
-	}
-	if (output_name != NULL && !valid_output_name(output_name)) {
-		snprintf(err, err_size, "invalid output name");
+			"value is too long or contains quotes/newlines");
 		return false;
 	}
 
@@ -130,7 +120,7 @@ bool caramel_config_patch_image(const char *input, const char *output_name,
 		return false;
 	}
 
-	bool target_default = output_name == NULL;
+	bool target_default = section == NULL;
 	enum { SCOPE_TOP, SCOPE_TARGET, SCOPE_OTHER } scope = SCOPE_TOP;
 	bool written = false;
 	bool target_seen = false;
@@ -153,20 +143,19 @@ bool caramel_config_patch_image(const char *input, const char *output_name,
 			// The current scope is ending; insert here if still
 			// owed
 			if (!written && want_scope) {
-				emit_image(ms, image_path, &at_start, &any);
+				emit_kv(ms, key, value, &at_start, &any);
 				written = true;
 			}
-			if (!target_default &&
-				section_is_target(secname, output_name)) {
+			if (!target_default && strcmp(secname, section) == 0) {
 				scope = SCOPE_TARGET;
 				target_seen = true;
 			} else {
 				scope = SCOPE_OTHER;
 			}
 			emit(ms, p, linelen, &at_start, &any);
-		} else if (want_scope && line_has_key(t, "image")) {
+		} else if (want_scope && line_has_key(t, key)) {
 			if (!written) {
-				emit_image(ms, image_path, &at_start, &any);
+				emit_kv(ms, key, value, &at_start, &any);
 				written = true;
 			}
 			// drop the replaced line (and any later duplicate)
@@ -178,7 +167,7 @@ bool caramel_config_patch_image(const char *input, const char *output_name,
 
 	if (!written) {
 		if (target_default || target_seen) {
-			emit_image(ms, image_path, &at_start, &any);
+			emit_kv(ms, key, value, &at_start, &any);
 		} else {
 			if (!at_start) {
 				fputc('\n', ms);
@@ -186,9 +175,9 @@ bool caramel_config_patch_image(const char *input, const char *output_name,
 			if (any) {
 				fputc('\n', ms);
 			}
-			fprintf(ms, "[output.%s]\n", output_name);
+			fprintf(ms, "[%s]\n", section);
 			at_start = true;
-			emit_image(ms, image_path, &at_start, &any);
+			emit_kv(ms, key, value, &at_start, &any);
 		}
 	}
 
@@ -199,6 +188,27 @@ bool caramel_config_patch_image(const char *input, const char *output_name,
 	}
 	*out = buf;
 	return true;
+}
+
+bool caramel_config_patch_image(const char *input, const char *output_name,
+	const char *image_path, char **out, char *err, size_t err_size) {
+	if (output_name == NULL) {
+		return patch_key(
+			input, NULL, "image", image_path, out, err, err_size);
+	}
+	if (!valid_output_name(output_name)) {
+		snprintf(err, err_size, "invalid output name");
+		return false;
+	}
+	char section[SECTION_NAME_MAX];
+	snprintf(section, sizeof(section), "output.%s", output_name);
+	return patch_key(
+		input, section, "image", image_path, out, err, err_size);
+}
+
+bool caramel_config_patch_setting(const char *input, const char *key,
+	const char *value, char **out, char *err, size_t err_size) {
+	return patch_key(input, NULL, key, value, out, err, err_size);
 }
 
 static bool read_config(
@@ -308,8 +318,9 @@ static bool write_atomic(
 	return true;
 }
 
-bool caramel_config_persist_image(const char *output_name,
-	const char *image_path, char *err, size_t err_size) {
+// Read the config, apply `patch_key(section, key, value)`, write it back
+static bool persist_core(const char *section, const char *key,
+	const char *value, char *err, size_t err_size) {
 	char path[PATH_MAX];
 	if (!caramel_config_path(path, sizeof(path))) {
 		snprintf(err, err_size,
@@ -324,8 +335,8 @@ bool caramel_config_persist_image(const char *output_name,
 	}
 
 	char *patched = NULL;
-	bool ok = caramel_config_patch_image(
-		content, output_name, image_path, &patched, err, err_size);
+	bool ok = patch_key(
+		content, section, key, value, &patched, err, err_size);
 	free(content);
 	if (!ok) {
 		return false;
@@ -334,4 +345,23 @@ bool caramel_config_persist_image(const char *output_name,
 	ok = write_atomic(path, patched, err, err_size);
 	free(patched);
 	return ok;
+}
+
+bool caramel_config_persist_image(const char *output_name,
+	const char *image_path, char *err, size_t err_size) {
+	if (output_name == NULL) {
+		return persist_core(NULL, "image", image_path, err, err_size);
+	}
+	if (!valid_output_name(output_name)) {
+		snprintf(err, err_size, "invalid output name");
+		return false;
+	}
+	char section[SECTION_NAME_MAX];
+	snprintf(section, sizeof(section), "output.%s", output_name);
+	return persist_core(section, "image", image_path, err, err_size);
+}
+
+bool caramel_config_persist_setting(
+	const char *key, const char *value, char *err, size_t err_size) {
+	return persist_core(NULL, key, value, err, err_size);
 }

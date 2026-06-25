@@ -15,6 +15,12 @@ enum caramel_ipc_command {
 	CARAMEL_CMD_QUERY = 3,
 	CARAMEL_CMD_QUERY_OUTPUTS = 4,
 	CARAMEL_CMD_IMG_PREPARED = 5,
+	CARAMEL_CMD_SET = 6,
+};
+
+enum caramel_set_field {
+	CARAMEL_SET_FIT = 1,
+	CARAMEL_SET_COLOR = 2,
 };
 
 enum caramel_ipc_status {

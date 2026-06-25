@@ -31,6 +31,25 @@ static int expect(const char *input, const char *output_name, const char *image,
 	return rc;
 }
 
+// Patch a top-level setting and assert the whole result equals `want`
+static int expect_setting(const char *input, const char *key, const char *value,
+	const char *want) {
+	char *out = NULL;
+	char err[256];
+	if (!caramel_config_patch_setting(
+		    input, key, value, &out, err, sizeof(err))) {
+		fprintf(stderr, "patch failed: %s\n", err);
+		return 1;
+	}
+	int rc = 0;
+	if (strcmp(out, want) != 0) {
+		fprintf(stderr, "got:\n%s\nwant:\n%s\n", out, want);
+		rc = 1;
+	}
+	free(out);
+	return rc;
+}
+
 static int test_replace_default(void) {
 	return expect("color = \"#111111\"\n"
 		      "image = \"/old.jpg\"\n"
@@ -91,6 +110,27 @@ static int test_default_keeps_sections(void) {
 		"image = \"/a.jpg\"\n");
 }
 
+// A top-level setting replaces its existing key in place
+static int test_set_replace_top(void) {
+	return expect_setting("color = \"#000000\"\n"
+			      "fit = \"cover\"\n",
+		"fit", "tile",
+		"color = \"#000000\"\n"
+		"fit = \"tile\"\n");
+}
+
+// A new top-level setting is inserted before the first section
+static int test_set_insert_before_section(void) {
+	return expect_setting("image = \"/a.jpg\"\n"
+			      "[output.DP-1]\n"
+			      "image = \"/b.jpg\"\n",
+		"color", "#223344",
+		"image = \"/a.jpg\"\n"
+		"color = \"#223344\"\n"
+		"[output.DP-1]\n"
+		"image = \"/b.jpg\"\n");
+}
+
 static int test_rejects_bad_input(void) {
 	char *out = NULL;
 	char err[256];
@@ -112,6 +152,8 @@ int main(void) {
 	rc |= test_insert_into_output();
 	rc |= test_append_output();
 	rc |= test_default_keeps_sections();
+	rc |= test_set_replace_top();
+	rc |= test_set_insert_before_section();
 	rc |= test_rejects_bad_input();
 	if (rc == 0) {
 		printf("config write: all checks passed\n");

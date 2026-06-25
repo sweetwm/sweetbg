@@ -317,6 +317,67 @@ static uint8_t handle_query_outputs(
 	return CARAMEL_STATUS_OK;
 }
 
+static bool fit_uses_color(enum caramel_fit fit) {
+	return fit == CARAMEL_FIT_CONTAIN || fit == CARAMEL_FIT_CENTER;
+}
+
+static void repaint_after_change(
+	struct daemon *daemon, bool color_changed, bool fit_changed) {
+	bool image_needs =
+		fit_changed || (color_changed && fit_uses_color(daemon->fit));
+	struct caramel_output *output;
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		if (!output->surface.configured) {
+			continue;
+		}
+		bool is_placeholder = effective_path(daemon, output)[0] == '\0';
+		if (is_placeholder ? color_changed : image_needs) {
+			output->surface.needs_repaint = true;
+		}
+	}
+	reconcile_paint(daemon);
+}
+
+static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
+	uint32_t len, char *message, size_t message_size) {
+	if (len != 8) {
+		snprintf(message, message_size, "invalid set request");
+		return CARAMEL_STATUS_ERR_BAD_REQUEST;
+	}
+	uint32_t field = caramel_get_u32(payload);
+	uint32_t value = caramel_get_u32(payload + 4);
+
+	if (field == CARAMEL_SET_FIT) {
+		if (value > CARAMEL_FIT_TILE) {
+			snprintf(message, message_size, "invalid fit mode");
+			return CARAMEL_STATUS_ERR_BAD_REQUEST;
+		}
+		enum caramel_fit fit = (enum caramel_fit)value;
+		if (fit != daemon->fit) {
+			daemon->fit = fit;
+			repaint_after_change(daemon, false, true);
+		}
+		snprintf(message, message_size, "fit %s",
+			caramel_fit_name(daemon->fit));
+		return CARAMEL_STATUS_OK;
+	}
+	if (field == CARAMEL_SET_COLOR) {
+		if (value > 0xffffffu) {
+			snprintf(message, message_size, "invalid color");
+			return CARAMEL_STATUS_ERR_BAD_REQUEST;
+		}
+		if (value != daemon->color) {
+			daemon->color = value;
+			repaint_after_change(daemon, true, false);
+		}
+		snprintf(message, message_size, "color #%06x",
+			daemon->color & 0xffffffu);
+		return CARAMEL_STATUS_OK;
+	}
+	snprintf(message, message_size, "unknown set field");
+	return CARAMEL_STATUS_ERR_BAD_REQUEST;
+}
+
 static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 	uint32_t len, int fd, char *message, size_t message_size, bool *stop) {
 	struct daemon *daemon = data;
@@ -331,6 +392,8 @@ static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 	case CARAMEL_CMD_IMG_PREPARED:
 		return handle_img_prepared(
 			daemon, payload, len, fd, message, message_size);
+	case CARAMEL_CMD_SET:
+		return handle_set(daemon, payload, len, message, message_size);
 	default:
 		snprintf(message, message_size, "unknown command");
 		return CARAMEL_STATUS_ERR_UNKNOWN_COMMAND;

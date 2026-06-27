@@ -708,7 +708,7 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 					"too many output overrides");
 				return MANJU_STATUS_ERR_BAD_REQUEST;
 			}
-			image_changed = old_path[0] != '\0';
+			image_changed = had_image;
 		}
 		if ((req.flags & MANJU_CLEAR_IMAGE) != 0) {
 			image_changed =

@@ -10,6 +10,12 @@ bool manju_config_patch_image(const char *input, const char *output_name,
 bool manju_config_persist_image(const char *output_name, const char *image_path,
 	char *err, size_t err_size);
 
+bool manju_config_patch_blank_output(const char *input, const char *output_name,
+	char **out, char *err, size_t err_size);
+
+bool manju_config_persist_blank_output(
+	const char *output_name, char *err, size_t err_size);
+
 bool manju_config_patch_setting(const char *input, const char *key,
 	const char *value, char **out, char *err, size_t err_size);
 

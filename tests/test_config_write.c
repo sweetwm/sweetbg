@@ -104,6 +104,24 @@ static int expect_clear_fit(
 	return rc;
 }
 
+static int expect_blank_output(
+	const char *input, const char *output_name, const char *want) {
+	char *out = NULL;
+	char err[256];
+	if (!manju_config_patch_blank_output(
+		    input, output_name, &out, err, sizeof(err))) {
+		fprintf(stderr, "patch failed: %s\n", err);
+		return 1;
+	}
+	int rc = 0;
+	if (strcmp(out, want) != 0) {
+		fprintf(stderr, "got:\n%s\nwant:\n%s\n", out, want);
+		rc = 1;
+	}
+	free(out);
+	return rc;
+}
+
 static int test_replace_default(void) {
 	return expect("color = \"#111111\"\n"
 		      "image = \"/old.jpg\"\n"
@@ -258,6 +276,26 @@ static int test_clear_missing_key_keeps_input(void) {
 		"image = \"/left.jpg\"\n");
 }
 
+static int test_blank_output_image(void) {
+	return expect_blank_output("image = \"/default.jpg\"\n"
+				   "[output.DP-1]\n"
+				   "image = \"/left.jpg\"\n"
+				   "fit = \"contain\"\n",
+		"DP-1",
+		"image = \"/default.jpg\"\n"
+		"[output.DP-1]\n"
+		"image = \"\"\n"
+		"fit = \"contain\"\n");
+}
+
+static int test_blank_output_appends_section(void) {
+	return expect_blank_output("image = \"/default.jpg\"\n", "DP-1",
+		"image = \"/default.jpg\"\n"
+		"\n"
+		"[output.DP-1]\n"
+		"image = \"\"\n");
+}
+
 static int test_rejects_bad_input(void) {
 	char *out = NULL;
 	char err[256];
@@ -272,6 +310,10 @@ static int test_rejects_bad_input(void) {
 	CHECK(!manju_config_patch_clear_image(
 		"", "bad name", &out, err, sizeof(err)));
 	CHECK(!manju_config_patch_clear_fit("", "a]b", &out, err, sizeof(err)));
+	CHECK(!manju_config_patch_blank_output(
+		"", NULL, &out, err, sizeof(err)));
+	CHECK(!manju_config_patch_blank_output(
+		"", "bad name", &out, err, sizeof(err)));
 	return 0;
 }
 
@@ -292,6 +334,8 @@ int main(void) {
 	rc |= test_clear_one_output_image();
 	rc |= test_clear_all_fit();
 	rc |= test_clear_missing_key_keeps_input();
+	rc |= test_blank_output_image();
+	rc |= test_blank_output_appends_section();
 	rc |= test_rejects_bad_input();
 	if (rc == 0) {
 		printf("config write: all checks passed\n");

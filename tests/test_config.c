@@ -117,12 +117,29 @@ static int test_per_output_sections(void) {
 	CHECK(strcmp(cfg.image, "/default.jpg") == 0);
 	CHECK(cfg.output_count == 2);
 	CHECK(strcmp(cfg.outputs[0].name, "DP-1") == 0);
+	CHECK(cfg.outputs[0].has_image);
 	CHECK(strcmp(cfg.outputs[0].image, "/left.jpg") == 0);
 	CHECK(cfg.outputs[0].has_fit);
 	CHECK(cfg.outputs[0].fit == MANJU_FIT_CONTAIN);
 	CHECK(strcmp(cfg.outputs[1].name, "HDMI-A-1") == 0);
+	CHECK(cfg.outputs[1].has_image);
 	CHECK(strcmp(cfg.outputs[1].image, "/tv.png") == 0);
 	CHECK(!cfg.outputs[1].has_fit);
+	return 0;
+}
+
+static int test_blank_output_image(void) {
+	struct manju_config cfg;
+	char err[256];
+	const char *text = "image = \"/default.jpg\"\n"
+			   "[output.DP-1]\n"
+			   "image = \"\"\n";
+	CHECK(parse(text, &cfg, err, sizeof(err)));
+	CHECK(strcmp(cfg.image, "/default.jpg") == 0);
+	CHECK(cfg.output_count == 1);
+	CHECK(strcmp(cfg.outputs[0].name, "DP-1") == 0);
+	CHECK(cfg.outputs[0].has_image);
+	CHECK(cfg.outputs[0].image[0] == '\0');
 	return 0;
 }
 
@@ -148,6 +165,7 @@ int main(void) {
 	rc |= test_bad_color_fails();
 	rc |= test_unquoted_and_missing_eq_fail();
 	rc |= test_per_output_sections();
+	rc |= test_blank_output_image();
 	rc |= test_bad_sections_fail();
 	if (rc == 0) {
 		printf("config: all checks passed\n");

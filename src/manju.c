@@ -243,6 +243,12 @@ static int cmd_set(int argc, char **argv) {
 
 static int persist_clear(uint32_t flags, const char *output) {
 	char err[256];
+	if ((flags & MANJU_CLEAR_BLANK) != 0 &&
+		!manju_config_persist_blank_output(output, err, sizeof(err))) {
+		fprintf(stderr,
+			"manju: applied but could not save config: %s\n", err);
+		return 1;
+	}
 	if ((flags & MANJU_CLEAR_IMAGE) != 0 &&
 		!manju_config_persist_clear_image(output, err, sizeof(err))) {
 		fprintf(stderr,
@@ -280,6 +286,8 @@ static int cmd_clear(int argc, char **argv) {
 			flags |= MANJU_CLEAR_IMAGE;
 		} else if (strcmp(a, "--fit") == 0) {
 			flags |= MANJU_CLEAR_FIT;
+		} else if (strcmp(a, "--blank") == 0) {
+			flags |= MANJU_CLEAR_BLANK;
 		} else {
 			fprintf(stderr, "manju: unknown clear option '%s'\n",
 				a);
@@ -289,6 +297,16 @@ static int cmd_clear(int argc, char **argv) {
 
 	if (output != NULL && !valid_output_arg(output)) {
 		fprintf(stderr, "manju: invalid --output name\n");
+		return 2;
+	}
+	if ((flags & MANJU_CLEAR_BLANK) != 0 && output == NULL) {
+		fprintf(stderr, "manju: --blank requires --output <name>\n");
+		return 2;
+	}
+	if ((flags & MANJU_CLEAR_BLANK) != 0 &&
+		(flags & MANJU_CLEAR_IMAGE) != 0) {
+		fprintf(stderr,
+			"manju: use either --blank or --image, not both\n");
 		return 2;
 	}
 	if (flags == 0) {
@@ -330,6 +348,8 @@ static void usage(FILE *out) {
 	      "  clear                      clear images to the background "
 	      "color\n"
 	      "  clear --output <name>      clear one output image override\n"
+	      "  clear --output <name> --blank\n"
+	      "                             show color on one output\n"
 	      "  clear --fit [--output <name>]\n"
 	      "                             clear fit state\n"
 	      "  query                      print daemon and output status\n"
@@ -340,6 +360,7 @@ static void usage(FILE *out) {
 	      "  -p, --persist        also save the change to the config\n"
 	      "  --image              clear image state (clear only)\n"
 	      "  --fit                clear fit state (clear only)\n"
+	      "  --blank              show color on one output (clear only)\n"
 	      "\n"
 	      "options:\n"
 	      "  -h, --help     show this help and exit\n"

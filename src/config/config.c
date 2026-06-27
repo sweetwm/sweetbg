@@ -158,6 +158,7 @@ static bool apply_output_pair(struct manju_config_output *output,
 	}
 	if (strcmp(key, "image") == 0) {
 		memcpy(output->image, text, strlen(text) + 1);
+		output->has_image = true;
 		return true;
 	}
 	if (strcmp(key, "fit") == 0) {
@@ -219,6 +220,7 @@ static struct manju_config_output *parse_section(struct manju_config *cfg,
 	memcpy(out->name, output_name, strlen(output_name) + 1);
 	out->image[0] = '\0';
 	out->fit = MANJU_FIT_COVER;
+	out->has_image = false;
 	out->has_fit = false;
 	return out;
 }

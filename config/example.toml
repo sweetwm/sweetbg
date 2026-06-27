@@ -24,3 +24,8 @@ fit = "cover"
 #
 # [output.HDMI-A-1]
 # image = "/home/me/Pictures/tv.png"
+#
+# Use an empty image to show only the background color on one output,
+# even when a top-level default image exists.
+# [output.eDP-1]
+# image = ""

@@ -40,6 +40,7 @@ enum manju_img_mode {
 enum manju_clear_flags {
 	MANJU_CLEAR_IMAGE = 1u << 0,
 	MANJU_CLEAR_FIT = 1u << 1,
+	MANJU_CLEAR_BLANK = 1u << 2,
 };
 
 void manju_put_u32(uint8_t *p, uint32_t value);

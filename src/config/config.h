@@ -26,6 +26,7 @@ struct manju_config_output {
 	char name[64];
 	char image[PATH_MAX];
 	enum manju_fit fit;
+	bool has_image;
 	bool has_fit;
 };
 

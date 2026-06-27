@@ -97,6 +97,16 @@ static void set_image_assignment(
 	entry->has_image = true;
 }
 
+static bool set_blank_assignment(struct daemon *daemon, const char *name) {
+	struct assignment *entry = ensure_assignment(daemon, name);
+	if (entry == NULL) {
+		return false;
+	}
+	entry->path[0] = '\0';
+	entry->has_image = true;
+	return true;
+}
+
 static void set_fit_assignment(
 	struct daemon *daemon, const char *name, enum manju_fit fit) {
 	struct assignment *entry = ensure_assignment(daemon, name);
@@ -376,16 +386,35 @@ static uint8_t handle_query(
 		const bool has_image = assigned != NULL && assigned->has_image;
 		const bool has_fit = assigned != NULL && assigned->has_fit;
 		if (has_image && has_fit) {
-			append_line(message, message_size, &off,
-				"%s: %dx%d scale %d (override: %s, fit: %s)\n",
-				name, output->pixel_width, output->pixel_height,
-				output->scale, assigned->path,
-				manju_fit_name(assigned->fit));
+			if (assigned->path[0] == '\0') {
+				append_line(message, message_size, &off,
+					"%s: %dx%d scale %d "
+					"(blank, fit: %s)\n",
+					name, output->pixel_width,
+					output->pixel_height, output->scale,
+					manju_fit_name(assigned->fit));
+			} else {
+				append_line(message, message_size, &off,
+					"%s: %dx%d scale %d "
+					"(override: %s, fit: %s)\n",
+					name, output->pixel_width,
+					output->pixel_height, output->scale,
+					assigned->path,
+					manju_fit_name(assigned->fit));
+			}
 		} else if (has_image) {
-			append_line(message, message_size, &off,
-				"%s: %dx%d scale %d (override: %s)\n", name,
-				output->pixel_width, output->pixel_height,
-				output->scale, assigned->path);
+			if (assigned->path[0] == '\0') {
+				append_line(message, message_size, &off,
+					"%s: %dx%d scale %d (blank)\n", name,
+					output->pixel_width,
+					output->pixel_height, output->scale);
+			} else {
+				append_line(message, message_size, &off,
+					"%s: %dx%d scale %d (override: %s)\n",
+					name, output->pixel_width,
+					output->pixel_height, output->scale,
+					assigned->path);
+			}
 		} else if (has_fit) {
 			append_line(message, message_size, &off,
 				"%s: %dx%d scale %d (fit: %s)\n", name,
@@ -617,6 +646,14 @@ static void clear_message(
 	const struct clear_request *req, char *message, size_t message_size) {
 	const bool image = (req->flags & MANJU_CLEAR_IMAGE) != 0;
 	const bool fit = (req->flags & MANJU_CLEAR_FIT) != 0;
+	const bool blank = (req->flags & MANJU_CLEAR_BLANK) != 0;
+	if (blank) {
+		snprintf(message, message_size,
+			fit ? "blanked image and cleared fit for %s"
+			    : "blanked image for %s",
+			req->output);
+		return;
+	}
 	const char *what = image && fit ? "image and fit"
 			   : image	? "image"
 					: "fit";
@@ -635,9 +672,20 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 		snprintf(message, message_size, "invalid clear request");
 		return MANJU_STATUS_ERR_BAD_REQUEST;
 	}
-	uint32_t allowed = MANJU_CLEAR_IMAGE | MANJU_CLEAR_FIT;
+	uint32_t allowed =
+		MANJU_CLEAR_IMAGE | MANJU_CLEAR_FIT | MANJU_CLEAR_BLANK;
 	if (req.flags == 0 || (req.flags & ~allowed) != 0) {
 		snprintf(message, message_size, "invalid clear target");
+		return MANJU_STATUS_ERR_BAD_REQUEST;
+	}
+	if ((req.flags & MANJU_CLEAR_BLANK) != 0 && req.output[0] == '\0') {
+		snprintf(message, message_size, "blank requires an output");
+		return MANJU_STATUS_ERR_BAD_REQUEST;
+	}
+	if ((req.flags & MANJU_CLEAR_BLANK) != 0 &&
+		(req.flags & MANJU_CLEAR_IMAGE) != 0) {
+		snprintf(message, message_size,
+			"blank and image clear are mutually exclusive");
 		return MANJU_STATUS_ERR_BAD_REQUEST;
 	}
 
@@ -654,6 +702,14 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 		bool image_changed = false;
 		bool fit_changed = false;
 
+		if ((req.flags & MANJU_CLEAR_BLANK) != 0) {
+			if (!set_blank_assignment(daemon, req.output)) {
+				snprintf(message, message_size,
+					"too many output overrides");
+				return MANJU_STATUS_ERR_BAD_REQUEST;
+			}
+			image_changed = old_path[0] != '\0';
+		}
 		if ((req.flags & MANJU_CLEAR_IMAGE) != 0) {
 			image_changed =
 				clear_image_assignment(daemon, req.output);
@@ -816,8 +872,10 @@ static void apply_config(struct daemon *daemon) {
 		if (out->has_fit) {
 			set_fit_assignment(daemon, out->name, out->fit);
 		}
-		if (out->image[0] != '\0') {
-			if (access(out->image, R_OK) == 0) {
+		if (out->has_image) {
+			if (out->image[0] == '\0') {
+				set_blank_assignment(daemon, out->name);
+			} else if (access(out->image, R_OK) == 0) {
 				set_image_assignment(
 					daemon, out->name, out->image);
 			} else {

@@ -55,6 +55,10 @@ supported keys are *image* and *fit*, and each key overrides only that
 top-level default. An output without a matching section uses the top-level
 defaults.
 
+Set *image* to an empty string to intentionally show the background color on one
+output even when a top-level default image exists. This is what
+*manju clear --output* <name> *--blank --persist* writes.
+
 # EXAMPLE
 
 ```

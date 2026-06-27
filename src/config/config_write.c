@@ -269,6 +269,16 @@ bool manju_config_patch_image(const char *input, const char *output_name,
 		input, section, "image", image_path, out, err, err_size);
 }
 
+bool manju_config_patch_blank_output(const char *input, const char *output_name,
+	char **out, char *err, size_t err_size) {
+	if (output_name == NULL) {
+		snprintf(err, err_size, "blank requires an output name");
+		return false;
+	}
+	return manju_config_patch_image(
+		input, output_name, "", out, err, err_size);
+}
+
 bool manju_config_patch_setting(const char *input, const char *key,
 	const char *value, char **out, char *err, size_t err_size) {
 	return patch_key(input, NULL, key, value, out, err, err_size);
@@ -468,6 +478,15 @@ bool manju_config_persist_image(const char *output_name, const char *image_path,
 	char section[SECTION_NAME_MAX];
 	snprintf(section, sizeof(section), "output.%s", output_name);
 	return persist_core(section, "image", image_path, err, err_size);
+}
+
+bool manju_config_persist_blank_output(
+	const char *output_name, char *err, size_t err_size) {
+	if (output_name == NULL) {
+		snprintf(err, err_size, "blank requires an output name");
+		return false;
+	}
+	return manju_config_persist_image(output_name, "", err, err_size);
 }
 
 bool manju_config_persist_setting(

@@ -58,10 +58,12 @@ parses arguments, sends one request, prints the response, and returns.
 
 	With *--output* <name>, image clearing removes only that output's image
 	override, so it falls back to the default image or background color.
-	*--fit* clears fit state instead: with *--output*, it removes that
-	output's fit override; without *--output*, it resets the default fit to
-	_cover_ and clears runtime per-output fit overrides. Pass both *--image*
-	and *--fit* to clear both kinds of state.
+	With *--output* <name> *--blank*, the output intentionally shows the
+	background color even when a default image is set. *--fit* clears fit
+	state instead: with *--output*, it removes that output's fit override;
+	without *--output*, it resets the default fit to _cover_ and clears
+	runtime per-output fit overrides. Pass both *--image* and *--fit* to
+	clear both kinds of state.
 
 	Pass *--persist* to also remove the matching saved keys from the config
 	file.

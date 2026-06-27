@@ -193,7 +193,7 @@ static bool patch_key(const char *input, const char *section, const char *key,
 	return true;
 }
 
-bool caramel_config_patch_image(const char *input, const char *output_name,
+bool manju_config_patch_image(const char *input, const char *output_name,
 	const char *image_path, char **out, char *err, size_t err_size) {
 	if (output_name == NULL) {
 		return patch_key(
@@ -209,12 +209,12 @@ bool caramel_config_patch_image(const char *input, const char *output_name,
 		input, section, "image", image_path, out, err, err_size);
 }
 
-bool caramel_config_patch_setting(const char *input, const char *key,
+bool manju_config_patch_setting(const char *input, const char *key,
 	const char *value, char **out, char *err, size_t err_size) {
 	return patch_key(input, NULL, key, value, out, err, err_size);
 }
 
-bool caramel_config_patch_output_setting(const char *input,
+bool manju_config_patch_output_setting(const char *input,
 	const char *output_name, const char *key, const char *value, char **out,
 	char *err, size_t err_size) {
 	if (!valid_output_name(output_name)) {
@@ -337,7 +337,7 @@ static bool write_atomic(
 static bool persist_core(const char *section, const char *key,
 	const char *value, char *err, size_t err_size) {
 	char path[PATH_MAX];
-	if (!caramel_config_path(path, sizeof(path))) {
+	if (!manju_config_path(path, sizeof(path))) {
 		snprintf(err, err_size,
 			"cannot resolve config path (set XDG_CONFIG_HOME or "
 			"HOME)");
@@ -362,8 +362,8 @@ static bool persist_core(const char *section, const char *key,
 	return ok;
 }
 
-bool caramel_config_persist_image(const char *output_name,
-	const char *image_path, char *err, size_t err_size) {
+bool manju_config_persist_image(const char *output_name, const char *image_path,
+	char *err, size_t err_size) {
 	if (output_name == NULL) {
 		return persist_core(NULL, "image", image_path, err, err_size);
 	}
@@ -376,12 +376,12 @@ bool caramel_config_persist_image(const char *output_name,
 	return persist_core(section, "image", image_path, err, err_size);
 }
 
-bool caramel_config_persist_setting(
+bool manju_config_persist_setting(
 	const char *key, const char *value, char *err, size_t err_size) {
 	return persist_core(NULL, key, value, err, err_size);
 }
 
-bool caramel_config_persist_output_setting(const char *output_name,
+bool manju_config_persist_output_setting(const char *output_name,
 	const char *key, const char *value, char *err, size_t err_size) {
 	if (!valid_output_name(output_name)) {
 		snprintf(err, err_size, "invalid output name");

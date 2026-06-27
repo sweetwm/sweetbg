@@ -2,9 +2,9 @@ scdoc = find_program('scdoc', required: false)
 
 if scdoc.found()
 	man_pages = {
-		'caramel.1.scd': 'man1',
-		'carameld.1.scd': 'man1',
-		'caramel.5.scd': 'man5',
+		'manju.1.scd': 'man1',
+		'manjud.1.scd': 'man1',
+		'manju.5.scd': 'man5',
 	}
 	mandir = get_option('mandir')
 

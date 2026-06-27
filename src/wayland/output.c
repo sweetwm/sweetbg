@@ -19,7 +19,7 @@ static void handle_geometry(void *data, struct wl_output *wl_output, int32_t x,
 	int32_t y, int32_t physical_width, int32_t physical_height,
 	int32_t subpixel, const char *make, const char *model,
 	int32_t transform) {
-	struct caramel_output *output = data;
+	struct manju_output *output = data;
 	output->transform = transform;
 	(void)wl_output;
 	(void)x;
@@ -33,7 +33,7 @@ static void handle_geometry(void *data, struct wl_output *wl_output, int32_t x,
 
 static void handle_mode(void *data, struct wl_output *wl_output, uint32_t flags,
 	int32_t width, int32_t height, int32_t refresh) {
-	struct caramel_output *output = data;
+	struct manju_output *output = data;
 	(void)wl_output;
 	(void)refresh;
 	if ((flags & WL_OUTPUT_MODE_CURRENT) != 0) {
@@ -49,7 +49,7 @@ static void handle_done(void *data, struct wl_output *wl_output) {
 
 static void handle_scale(
 	void *data, struct wl_output *wl_output, int32_t scale) {
-	struct caramel_output *output = data;
+	struct manju_output *output = data;
 	(void)wl_output;
 	if (scale != output->scale) {
 		output->scale = scale;
@@ -59,7 +59,7 @@ static void handle_scale(
 
 static void handle_name(
 	void *data, struct wl_output *wl_output, const char *name) {
-	struct caramel_output *output = data;
+	struct manju_output *output = data;
 	(void)wl_output;
 	free(output->name);
 	output->name = dup_string(name);
@@ -67,7 +67,7 @@ static void handle_name(
 
 static void handle_description(
 	void *data, struct wl_output *wl_output, const char *description) {
-	struct caramel_output *output = data;
+	struct manju_output *output = data;
 	(void)wl_output;
 	free(output->description);
 	output->description = dup_string(description);
@@ -82,9 +82,9 @@ static const struct wl_output_listener output_listener = {
 	.description = handle_description,
 };
 
-bool caramel_output_create(struct wl_list *outputs,
-	struct wl_registry *registry, uint32_t global_name, uint32_t version) {
-	struct caramel_output *output = calloc(1, sizeof(*output));
+bool manju_output_create(struct wl_list *outputs, struct wl_registry *registry,
+	uint32_t global_name, uint32_t version) {
+	struct manju_output *output = calloc(1, sizeof(*output));
 	if (output == NULL) {
 		return false;
 	}
@@ -105,10 +105,10 @@ bool caramel_output_create(struct wl_list *outputs,
 	return true;
 }
 
-static void output_destroy(struct caramel_output *output) {
+static void output_destroy(struct manju_output *output) {
 	wl_list_remove(&output->link);
 	// Tear the layer surface down before its output
-	caramel_surface_destroy(&output->surface);
+	manju_surface_destroy(&output->surface);
 	if (output->wl_output != NULL) {
 		wl_output_destroy(output->wl_output);
 	}
@@ -117,9 +117,9 @@ static void output_destroy(struct caramel_output *output) {
 	free(output);
 }
 
-void caramel_output_remove(struct wl_list *outputs, uint32_t global_name) {
-	struct caramel_output *output;
-	struct caramel_output *tmp;
+void manju_output_remove(struct wl_list *outputs, uint32_t global_name) {
+	struct manju_output *output;
+	struct manju_output *tmp;
 	wl_list_for_each_safe(output, tmp, outputs, link) {
 		if (output->global_name == global_name) {
 			output_destroy(output);
@@ -128,9 +128,9 @@ void caramel_output_remove(struct wl_list *outputs, uint32_t global_name) {
 	}
 }
 
-void caramel_outputs_finish(struct wl_list *outputs) {
-	struct caramel_output *output;
-	struct caramel_output *tmp;
+void manju_outputs_finish(struct wl_list *outputs) {
+	struct manju_output *output;
+	struct manju_output *tmp;
 	wl_list_for_each_safe(output, tmp, outputs, link) {
 		output_destroy(output);
 	}

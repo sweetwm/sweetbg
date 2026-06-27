@@ -8,10 +8,10 @@
 #define BYTES_PER_PIXEL 4
 
 static void handle_release(void *data, struct wl_buffer *wl_buffer) {
-	struct caramel_buffer *buffer = data;
+	struct manju_buffer *buffer = data;
 	(void)wl_buffer;
 
-	caramel_buffer_destroy(buffer);
+	manju_buffer_destroy(buffer);
 }
 
 static const struct wl_buffer_listener buffer_listener = {
@@ -35,7 +35,7 @@ static bool buffer_size(uint32_t width, uint32_t height, uint32_t *stride_out,
 	return true;
 }
 
-bool caramel_buffer_create(struct caramel_buffer *buffer, struct wl_shm *shm,
+bool manju_buffer_create(struct manju_buffer *buffer, struct wl_shm *shm,
 	uint32_t width, uint32_t height) {
 	buffer->wl_buffer = NULL;
 	buffer->data = NULL;
@@ -49,7 +49,7 @@ bool caramel_buffer_create(struct caramel_buffer *buffer, struct wl_shm *shm,
 		return false;
 	}
 
-	int fd = memfd_create("caramel-shm", MFD_CLOEXEC);
+	int fd = memfd_create("manju-shm", MFD_CLOEXEC);
 	if (fd < 0) {
 		return false;
 	}
@@ -89,7 +89,7 @@ bool caramel_buffer_create(struct caramel_buffer *buffer, struct wl_shm *shm,
 	return true;
 }
 
-bool caramel_buffer_from_fd(struct caramel_buffer *buffer, struct wl_shm *shm,
+bool manju_buffer_from_fd(struct manju_buffer *buffer, struct wl_shm *shm,
 	int fd, uint32_t width, uint32_t height) {
 	buffer->wl_buffer = NULL;
 	buffer->data = NULL;
@@ -125,7 +125,7 @@ bool caramel_buffer_from_fd(struct caramel_buffer *buffer, struct wl_shm *shm,
 	return true;
 }
 
-void caramel_buffer_fill(struct caramel_buffer *buffer, uint32_t color) {
+void manju_buffer_fill(struct manju_buffer *buffer, uint32_t color) {
 	uint32_t *pixels = buffer->data;
 	size_t count = buffer->size / BYTES_PER_PIXEL;
 	for (size_t i = 0; i < count; i++) {
@@ -133,7 +133,7 @@ void caramel_buffer_fill(struct caramel_buffer *buffer, uint32_t color) {
 	}
 }
 
-void caramel_buffer_destroy(struct caramel_buffer *buffer) {
+void manju_buffer_destroy(struct manju_buffer *buffer) {
 	if (buffer->wl_buffer != NULL) {
 		wl_buffer_destroy(buffer->wl_buffer);
 		buffer->wl_buffer = NULL;

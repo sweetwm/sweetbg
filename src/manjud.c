@@ -20,7 +20,7 @@
 struct assignment {
 	char name[64];
 	char path[PATH_MAX];
-	enum caramel_fit fit;
+	enum manju_fit fit;
 	bool has_image;
 	bool has_fit;
 };
@@ -29,9 +29,9 @@ struct assignment {
 
 struct daemon {
 	struct wl_display *display;
-	struct caramel_registry *reg;
+	struct manju_registry *reg;
 	uint32_t color;
-	enum caramel_fit fit;
+	enum manju_fit fit;
 	char default_path[PATH_MAX];
 	struct assignment assignments[MAX_ASSIGNMENTS];
 	size_t assignment_count;
@@ -96,7 +96,7 @@ static void set_image_assignment(
 }
 
 static void set_fit_assignment(
-	struct daemon *daemon, const char *name, enum caramel_fit fit) {
+	struct daemon *daemon, const char *name, enum manju_fit fit) {
 	struct assignment *entry = ensure_assignment(daemon, name);
 	if (entry == NULL) {
 		return;
@@ -140,17 +140,17 @@ static bool clear_fit_assignments(struct daemon *daemon) {
 	return changed;
 }
 
-static bool ensure_surfaces(struct caramel_registry *reg) {
-	struct caramel_output *output;
+static bool ensure_surfaces(struct manju_registry *reg) {
+	struct manju_output *output;
 	wl_list_for_each(output, &reg->outputs, link) {
 		if (output->surface.layer_surface != NULL) {
 			continue;
 		}
-		if (!caramel_surface_create(&output->surface, reg->compositor,
+		if (!manju_surface_create(&output->surface, reg->compositor,
 			    reg->layer_shell, output->wl_output,
 			    reg->viewporter, reg->fractional_scale_manager)) {
 			fprintf(stderr,
-				"carameld: failed to create a layer surface\n");
+				"manjud: failed to create a layer surface\n");
 			return false;
 		}
 	}
@@ -158,15 +158,15 @@ static bool ensure_surfaces(struct caramel_registry *reg) {
 }
 
 static const char *effective_path(
-	const struct daemon *daemon, const struct caramel_output *output) {
+	const struct daemon *daemon, const struct manju_output *output) {
 	const struct assignment *assigned =
 		const_assignment_for(daemon, output->name);
 	return assigned != NULL && assigned->has_image ? assigned->path
 						       : daemon->default_path;
 }
 
-static enum caramel_fit effective_fit(
-	const struct daemon *daemon, const struct caramel_output *output) {
+static enum manju_fit effective_fit(
+	const struct daemon *daemon, const struct manju_output *output) {
 	const struct assignment *assigned =
 		const_assignment_for(daemon, output->name);
 	return assigned != NULL && assigned->has_fit ? assigned->fit
@@ -181,7 +181,7 @@ static void client_binary(char *out, size_t out_size) {
 		char *slash = strrchr(out, '/');
 		if (slash != NULL) {
 			size_t dir_len = (size_t)(slash - out) + 1;
-			const char *bin = "caramel";
+			const char *bin = "manju";
 			if (dir_len + strlen(bin) + 1 <= out_size) {
 				memcpy(out + dir_len, bin, strlen(bin) + 1);
 				if (access(out, X_OK) == 0) {
@@ -190,7 +190,7 @@ static void client_binary(char *out, size_t out_size) {
 			}
 		}
 	}
-	snprintf(out, out_size, "caramel");
+	snprintf(out, out_size, "manju");
 }
 
 static void spawn_prepare(const char *name, const char *path) {
@@ -199,20 +199,20 @@ static void spawn_prepare(const char *name, const char *path) {
 	}
 	pid_t pid = fork();
 	if (pid < 0) {
-		fprintf(stderr, "carameld: cannot spawn client: %s\n",
+		fprintf(stderr, "manjud: cannot spawn client: %s\n",
 			strerror(errno));
 		return;
 	}
 	if (pid == 0) {
 		char bin[PATH_MAX];
 		client_binary(bin, sizeof(bin));
-		execlp(bin, "caramel", "prepare", name, path, (char *)NULL);
+		execlp(bin, "manju", "prepare", name, path, (char *)NULL);
 		_exit(127);
 	}
 }
 
 static void reconcile_paint(struct daemon *daemon) {
-	struct caramel_output *output;
+	struct manju_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured ||
 			!output->surface.needs_repaint) {
@@ -220,7 +220,7 @@ static void reconcile_paint(struct daemon *daemon) {
 		}
 		const char *path = effective_path(daemon, output);
 		if (path[0] == '\0') {
-			caramel_surface_paint_color(&output->surface,
+			manju_surface_paint_color(&output->surface,
 				daemon->reg->shm, output->scale, daemon->color);
 		} else {
 			output->surface.needs_repaint = false;
@@ -243,12 +243,12 @@ static bool parse_prepared(
 	if (len < 20) {
 		return false;
 	}
-	req->mode = caramel_get_u32(p);
-	req->scale = (int32_t)caramel_get_u32(p + 4);
-	req->width = caramel_get_u32(p + 8);
-	req->height = caramel_get_u32(p + 12);
+	req->mode = manju_get_u32(p);
+	req->scale = (int32_t)manju_get_u32(p + 4);
+	req->width = manju_get_u32(p + 8);
+	req->height = manju_get_u32(p + 12);
 
-	uint32_t name_len = caramel_get_u32(p + 16);
+	uint32_t name_len = manju_get_u32(p + 16);
 	size_t off = 20;
 	if (name_len == 0 || name_len >= sizeof(req->name) ||
 		off + name_len > len) {
@@ -261,7 +261,7 @@ static bool parse_prepared(
 	if (off + 4 > len) {
 		return false;
 	}
-	uint32_t path_len = caramel_get_u32(p + off);
+	uint32_t path_len = manju_get_u32(p + off);
 	off += 4;
 	if (path_len == 0 || path_len >= sizeof(req->path) ||
 		off + path_len > len) {
@@ -278,11 +278,11 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	struct prepared_request req;
 	if (fd < 0 || !parse_prepared(payload, len, &req)) {
 		snprintf(message, message_size, "invalid prepared image");
-		return CARAMEL_STATUS_ERR_BAD_REQUEST;
+		return MANJU_STATUS_ERR_BAD_REQUEST;
 	}
 
-	struct caramel_output *output;
-	struct caramel_output *match = NULL;
+	struct manju_output *output;
+	struct manju_output *match = NULL;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (output->name != NULL &&
 			strcmp(output->name, req.name) == 0) {
@@ -292,24 +292,24 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	}
 	if (match == NULL) {
 		snprintf(message, message_size, "no output named %s", req.name);
-		return CARAMEL_STATUS_ERR_BAD_REQUEST;
+		return MANJU_STATUS_ERR_BAD_REQUEST;
 	}
 
-	if (!caramel_surface_attach_prepared(&match->surface, daemon->reg->shm,
+	if (!manju_surface_attach_prepared(&match->surface, daemon->reg->shm,
 		    req.scale, fd, req.width, req.height)) {
 		snprintf(message, message_size, "could not attach buffer");
-		return CARAMEL_STATUS_ERR_IMAGE;
+		return MANJU_STATUS_ERR_IMAGE;
 	}
 
 	// Update remembered assignments unless this is a daemon-driven repaint
-	if (req.mode == CARAMEL_IMG_DEFAULT) {
+	if (req.mode == MANJU_IMG_DEFAULT) {
 		memcpy(daemon->default_path, req.path, strlen(req.path) + 1);
 		clear_image_assignments(daemon);
-	} else if (req.mode == CARAMEL_IMG_OVERRIDE) {
+	} else if (req.mode == MANJU_IMG_OVERRIDE) {
 		set_image_assignment(daemon, req.name, req.path);
 	}
 	snprintf(message, message_size, "applied %s to %s", req.path, req.name);
-	return CARAMEL_STATUS_OK;
+	return MANJU_STATUS_OK;
 }
 
 __attribute__((format(printf, 4, 5))) static void append_line(
@@ -342,9 +342,9 @@ static uint8_t handle_query(
 			"default: color #%06x\n", daemon->color & 0xffffffu);
 	}
 	append_line(message, message_size, &off, "fit: %s\n",
-		caramel_fit_name(daemon->fit));
+		manju_fit_name(daemon->fit));
 
-	struct caramel_output *output;
+	struct manju_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		const char *name =
 			output->name != NULL ? output->name : "(unnamed)";
@@ -357,7 +357,7 @@ static uint8_t handle_query(
 				"%s: %dx%d scale %d (override: %s, fit: %s)\n",
 				name, output->pixel_width, output->pixel_height,
 				output->scale, assigned->path,
-				caramel_fit_name(assigned->fit));
+				manju_fit_name(assigned->fit));
 		} else if (has_image) {
 			append_line(message, message_size, &off,
 				"%s: %dx%d scale %d (override: %s)\n", name,
@@ -367,7 +367,7 @@ static uint8_t handle_query(
 			append_line(message, message_size, &off,
 				"%s: %dx%d scale %d (fit: %s)\n", name,
 				output->pixel_width, output->pixel_height,
-				output->scale, caramel_fit_name(assigned->fit));
+				output->scale, manju_fit_name(assigned->fit));
 		} else {
 			append_line(message, message_size, &off,
 				"%s: %dx%d scale %d\n", name,
@@ -380,7 +380,7 @@ static uint8_t handle_query(
 	if (off > 0 && off <= message_size && message[off - 1] == '\n') {
 		message[off - 1] = '\0';
 	}
-	return CARAMEL_STATUS_OK;
+	return MANJU_STATUS_OK;
 }
 
 static uint8_t handle_query_outputs(
@@ -388,7 +388,7 @@ static uint8_t handle_query_outputs(
 	size_t off = 0;
 	append_line(message, message_size, &off, "meta %u %u\n",
 		(unsigned)daemon->fit, daemon->color & 0xffffffu);
-	struct caramel_output *output;
+	struct manju_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured || output->name == NULL) {
 			continue;
@@ -397,7 +397,7 @@ static uint8_t handle_query_outputs(
 			output->scale > 0 ? (uint32_t)output->scale : 1;
 		uint32_t pw;
 		uint32_t ph;
-		caramel_surface_buffer_size(
+		manju_surface_buffer_size(
 			&output->surface, output->scale, &pw, &ph);
 		append_line(message, message_size, &off, "%s %u %u %u %u\n",
 			output->name, pw, ph, scale,
@@ -406,16 +406,16 @@ static uint8_t handle_query_outputs(
 	if (off > 0 && off <= message_size && message[off - 1] == '\n') {
 		message[off - 1] = '\0';
 	}
-	return CARAMEL_STATUS_OK;
+	return MANJU_STATUS_OK;
 }
 
-static bool fit_uses_color(enum caramel_fit fit) {
-	return fit == CARAMEL_FIT_CONTAIN || fit == CARAMEL_FIT_CENTER;
+static bool fit_uses_color(enum manju_fit fit) {
+	return fit == MANJU_FIT_CONTAIN || fit == MANJU_FIT_CENTER;
 }
 
 static void repaint_after_change(
 	struct daemon *daemon, bool color_changed, bool fit_changed) {
-	struct caramel_output *output;
+	struct manju_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured) {
 			continue;
@@ -432,9 +432,9 @@ static void repaint_after_change(
 	reconcile_paint(daemon);
 }
 
-static struct caramel_output *find_output(
+static struct manju_output *find_output(
 	struct daemon *daemon, const char *name) {
-	struct caramel_output *output;
+	struct manju_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (output->name != NULL && strcmp(output->name, name) == 0) {
 			return output;
@@ -444,7 +444,7 @@ static struct caramel_output *find_output(
 }
 
 static void repaint_output_after_fit(struct daemon *daemon,
-	struct caramel_output *output, enum caramel_fit old_fit) {
+	struct manju_output *output, enum manju_fit old_fit) {
 	if (!output->surface.configured) {
 		return;
 	}
@@ -469,13 +469,13 @@ static bool parse_set(
 	if (len != 8 && len < 12) {
 		return false;
 	}
-	req->field = caramel_get_u32(payload);
-	req->value = caramel_get_u32(payload + 4);
+	req->field = manju_get_u32(payload);
+	req->value = manju_get_u32(payload + 4);
 	req->output[0] = '\0';
 	if (len == 8) {
 		return true;
 	}
-	uint32_t output_len = caramel_get_u32(payload + 8);
+	uint32_t output_len = manju_get_u32(payload + 8);
 	if (output_len == 0 || output_len >= sizeof(req->output) ||
 		12 + output_len != len) {
 		return false;
@@ -490,30 +490,29 @@ static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 	struct set_request req;
 	if (!parse_set(payload, len, &req)) {
 		snprintf(message, message_size, "invalid set request");
-		return CARAMEL_STATUS_ERR_BAD_REQUEST;
+		return MANJU_STATUS_ERR_BAD_REQUEST;
 	}
 
-	if (req.field == CARAMEL_SET_FIT) {
-		if (req.value > CARAMEL_FIT_TILE) {
+	if (req.field == MANJU_SET_FIT) {
+		if (req.value > MANJU_FIT_TILE) {
 			snprintf(message, message_size, "invalid fit mode");
-			return CARAMEL_STATUS_ERR_BAD_REQUEST;
+			return MANJU_STATUS_ERR_BAD_REQUEST;
 		}
-		enum caramel_fit fit = (enum caramel_fit)req.value;
+		enum manju_fit fit = (enum manju_fit)req.value;
 		if (req.output[0] != '\0') {
-			struct caramel_output *output =
+			struct manju_output *output =
 				find_output(daemon, req.output);
 			if (output == NULL) {
 				snprintf(message, message_size,
 					"no output named %s", req.output);
-				return CARAMEL_STATUS_ERR_BAD_REQUEST;
+				return MANJU_STATUS_ERR_BAD_REQUEST;
 			}
-			enum caramel_fit old_fit =
-				effective_fit(daemon, output);
+			enum manju_fit old_fit = effective_fit(daemon, output);
 			set_fit_assignment(daemon, req.output, fit);
 			repaint_output_after_fit(daemon, output, old_fit);
 			snprintf(message, message_size, "fit %s for %s",
-				caramel_fit_name(fit), req.output);
-			return CARAMEL_STATUS_OK;
+				manju_fit_name(fit), req.output);
+			return MANJU_STATUS_OK;
 		}
 		bool changed = fit != daemon->fit;
 		bool cleared = clear_fit_assignments(daemon);
@@ -524,18 +523,18 @@ static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 			repaint_after_change(daemon, false, true);
 		}
 		snprintf(message, message_size, "fit %s",
-			caramel_fit_name(daemon->fit));
-		return CARAMEL_STATUS_OK;
+			manju_fit_name(daemon->fit));
+		return MANJU_STATUS_OK;
 	}
-	if (req.field == CARAMEL_SET_COLOR) {
+	if (req.field == MANJU_SET_COLOR) {
 		if (req.output[0] != '\0') {
 			snprintf(message, message_size,
 				"color cannot be scoped to an output");
-			return CARAMEL_STATUS_ERR_BAD_REQUEST;
+			return MANJU_STATUS_ERR_BAD_REQUEST;
 		}
 		if (req.value > 0xffffffu) {
 			snprintf(message, message_size, "invalid color");
-			return CARAMEL_STATUS_ERR_BAD_REQUEST;
+			return MANJU_STATUS_ERR_BAD_REQUEST;
 		}
 		if (req.value != daemon->color) {
 			daemon->color = req.value;
@@ -543,31 +542,31 @@ static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 		}
 		snprintf(message, message_size, "color #%06x",
 			daemon->color & 0xffffffu);
-		return CARAMEL_STATUS_OK;
+		return MANJU_STATUS_OK;
 	}
 	snprintf(message, message_size, "unknown set field");
-	return CARAMEL_STATUS_ERR_BAD_REQUEST;
+	return MANJU_STATUS_ERR_BAD_REQUEST;
 }
 
 static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 	uint32_t len, int fd, char *message, size_t message_size, bool *stop) {
 	struct daemon *daemon = data;
 	switch (command) {
-	case CARAMEL_CMD_STOP:
+	case MANJU_CMD_STOP:
 		*stop = true;
-		return CARAMEL_STATUS_OK;
-	case CARAMEL_CMD_QUERY:
+		return MANJU_STATUS_OK;
+	case MANJU_CMD_QUERY:
 		return handle_query(daemon, message, message_size);
-	case CARAMEL_CMD_QUERY_OUTPUTS:
+	case MANJU_CMD_QUERY_OUTPUTS:
 		return handle_query_outputs(daemon, message, message_size);
-	case CARAMEL_CMD_IMG_PREPARED:
+	case MANJU_CMD_IMG_PREPARED:
 		return handle_img_prepared(
 			daemon, payload, len, fd, message, message_size);
-	case CARAMEL_CMD_SET:
+	case MANJU_CMD_SET:
 		return handle_set(daemon, payload, len, message, message_size);
 	default:
 		snprintf(message, message_size, "unknown command");
-		return CARAMEL_STATUS_ERR_UNKNOWN_COMMAND;
+		return MANJU_STATUS_ERR_UNKNOWN_COMMAND;
 	}
 }
 
@@ -578,14 +577,14 @@ static void install_signal_handlers(void) {
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
 
-	// Auto-reap the short-lived `caramel prepare` children we spawn
+	// Auto-reap the short-lived `manju prepare` children we spawn
 	struct sigaction chld;
 	memset(&chld, 0, sizeof(chld));
 	chld.sa_handler = SIG_IGN;
 	sigaction(SIGCHLD, &chld, NULL);
 }
 
-static void run_loop(struct daemon *daemon, struct caramel_ipc_server *ipc) {
+static void run_loop(struct daemon *daemon, struct manju_ipc_server *ipc) {
 	struct wl_display *display = daemon->display;
 	struct pollfd fds[2];
 	fds[0].fd = wl_display_get_fd(display);
@@ -621,7 +620,7 @@ static void run_loop(struct daemon *daemon, struct caramel_ipc_server *ipc) {
 
 		if ((fds[1].revents & POLLIN) != 0) {
 			bool stop = false;
-			caramel_ipc_server_handle(ipc, dispatch, daemon, &stop);
+			manju_ipc_server_handle(ipc, dispatch, daemon, &stop);
 			if (stop) {
 				g_running = 0;
 			}
@@ -629,8 +628,8 @@ static void run_loop(struct daemon *daemon, struct caramel_ipc_server *ipc) {
 	}
 }
 
-static void report_outputs(struct caramel_registry *reg) {
-	struct caramel_output *output;
+static void report_outputs(struct manju_registry *reg) {
+	struct manju_output *output;
 	wl_list_for_each(output, &reg->outputs, link) {
 		printf("  output %s: %dx%d scale %d -> surface %ux%u%s\n",
 			output->name != NULL ? output->name : "(unnamed)",
@@ -642,10 +641,10 @@ static void report_outputs(struct caramel_registry *reg) {
 }
 
 static void apply_config(struct daemon *daemon) {
-	struct caramel_config cfg;
+	struct manju_config cfg;
 	char err[256];
-	if (!caramel_config_load(&cfg, err, sizeof(err))) {
-		fprintf(stderr, "carameld: %s\n", err);
+	if (!manju_config_load(&cfg, err, sizeof(err))) {
+		fprintf(stderr, "manjud: %s\n", err);
 	}
 	daemon->color = cfg.color;
 	daemon->fit = cfg.fit;
@@ -655,13 +654,13 @@ static void apply_config(struct daemon *daemon) {
 			memcpy(daemon->default_path, cfg.image,
 				strlen(cfg.image) + 1);
 		} else {
-			fprintf(stderr, "carameld: configured image %s: %s\n",
+			fprintf(stderr, "manjud: configured image %s: %s\n",
 				cfg.image, strerror(errno));
 		}
 	}
 
 	for (size_t i = 0; i < cfg.output_count; i++) {
-		const struct caramel_config_output *out = &cfg.outputs[i];
+		const struct manju_config_output *out = &cfg.outputs[i];
 		if (out->has_fit) {
 			set_fit_assignment(daemon, out->name, out->fit);
 		}
@@ -671,26 +670,26 @@ static void apply_config(struct daemon *daemon) {
 					daemon, out->name, out->image);
 			} else {
 				fprintf(stderr,
-					"carameld: configured image %s: %s\n",
+					"manjud: configured image %s: %s\n",
 					out->image, strerror(errno));
 			}
 		}
 	}
 }
 
-static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {
-	struct caramel_registry reg;
-	if (!caramel_registry_init(&reg, display)) {
+static bool serve(struct wl_display *display, struct manju_ipc_server *ipc) {
+	struct manju_registry reg;
+	if (!manju_registry_init(&reg, display)) {
 		return false;
 	}
 
 	// A second roundtrip delivers the configure for each new surface
 	if (!ensure_surfaces(&reg) || wl_display_roundtrip(display) < 0) {
-		caramel_registry_finish(&reg);
+		manju_registry_finish(&reg);
 		return false;
 	}
 
-	printf("carameld: connected; %d output(s), wlr-layer-shell and "
+	printf("manjud: connected; %d output(s), wlr-layer-shell and "
 	       "wl_shm available\n",
 		wl_list_length(&reg.outputs));
 	report_outputs(&reg);
@@ -705,27 +704,26 @@ static bool serve(struct wl_display *display, struct caramel_ipc_server *ipc) {
 	// The initial configures flagged each surface; paint config image/color
 	reconcile_paint(&daemon);
 	if (wl_display_roundtrip(display) < 0) {
-		caramel_registry_finish(&reg);
+		manju_registry_finish(&reg);
 		return false;
 	}
 
 	run_loop(&daemon, ipc);
-	caramel_registry_finish(&reg);
+	manju_registry_finish(&reg);
 	return true;
 }
 
 static int run(void) {
-	struct caramel_ipc_server ipc;
-	if (!caramel_ipc_server_init(&ipc)) {
+	struct manju_ipc_server ipc;
+	if (!manju_ipc_server_init(&ipc)) {
 		return 1;
 	}
 
 	struct wl_display *display = wl_display_connect(NULL);
 	if (display == NULL) {
-		fprintf(stderr,
-			"carameld: cannot connect to a wayland display; "
-			"is WAYLAND_DISPLAY set?\n");
-		caramel_ipc_server_finish(&ipc);
+		fprintf(stderr, "manjud: cannot connect to a wayland display; "
+				"is WAYLAND_DISPLAY set?\n");
+		manju_ipc_server_finish(&ipc);
 		return 1;
 	}
 
@@ -733,7 +731,7 @@ static int run(void) {
 	bool ok = serve(display, &ipc);
 
 	wl_display_disconnect(display);
-	caramel_ipc_server_finish(&ipc);
+	manju_ipc_server_finish(&ipc);
 	return ok ? 0 : 1;
 }
 
@@ -742,16 +740,16 @@ int main(int argc, char **argv) {
 		const char *arg = argv[1];
 
 		if (strcmp(arg, "-V") == 0 || strcmp(arg, "--version") == 0) {
-			printf("carameld %s\n", CARAMEL_VERSION);
+			printf("manjud %s\n", MANJU_VERSION);
 			return 0;
 		}
 
 		if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
-			printf("usage: carameld [-h|--help] [-V|--version]\n");
+			printf("usage: manjud [-h|--help] [-V|--version]\n");
 			return 0;
 		}
 
-		fprintf(stderr, "carameld: unknown argument '%s'\n", arg);
+		fprintf(stderr, "manjud: unknown argument '%s'\n", arg);
 		return 2;
 	}
 

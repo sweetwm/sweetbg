@@ -91,5 +91,5 @@ jobs:
 
       - run: meson setup build-release --werror -Dbuildtype=release
       - run: ninja -C build-release
-      - run: ./build-release/caramel --version
-      - run: ./build-release/carameld --version
+      - run: ./build-release/manju --version
+      - run: ./build-release/manjud --version

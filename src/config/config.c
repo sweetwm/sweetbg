@@ -7,39 +7,39 @@
 #define DEFAULT_COLOR 0x1e1e2e
 #define CONFIG_LINE_MAX (PATH_MAX + 64)
 
-const char *caramel_fit_name(enum caramel_fit fit) {
+const char *manju_fit_name(enum manju_fit fit) {
 	switch (fit) {
-	case CARAMEL_FIT_CONTAIN:
+	case MANJU_FIT_CONTAIN:
 		return "contain";
-	case CARAMEL_FIT_CENTER:
+	case MANJU_FIT_CENTER:
 		return "center";
-	case CARAMEL_FIT_TILE:
+	case MANJU_FIT_TILE:
 		return "tile";
-	case CARAMEL_FIT_COVER:
+	case MANJU_FIT_COVER:
 		break;
 	}
 	return "cover";
 }
 
-bool caramel_fit_from_name(const char *name, enum caramel_fit *out) {
+bool manju_fit_from_name(const char *name, enum manju_fit *out) {
 	if (strcmp(name, "cover") == 0) {
-		*out = CARAMEL_FIT_COVER;
+		*out = MANJU_FIT_COVER;
 	} else if (strcmp(name, "contain") == 0) {
-		*out = CARAMEL_FIT_CONTAIN;
+		*out = MANJU_FIT_CONTAIN;
 	} else if (strcmp(name, "center") == 0) {
-		*out = CARAMEL_FIT_CENTER;
+		*out = MANJU_FIT_CENTER;
 	} else if (strcmp(name, "tile") == 0) {
-		*out = CARAMEL_FIT_TILE;
+		*out = MANJU_FIT_TILE;
 	} else {
 		return false;
 	}
 	return true;
 }
 
-void caramel_config_defaults(struct caramel_config *cfg) {
+void manju_config_defaults(struct manju_config *cfg) {
 	cfg->image[0] = '\0';
 	cfg->color = DEFAULT_COLOR;
-	cfg->fit = CARAMEL_FIT_COVER;
+	cfg->fit = MANJU_FIT_COVER;
 	cfg->output_count = 0;
 }
 
@@ -94,7 +94,7 @@ static int hex_value(char c) {
 	return -1;
 }
 
-bool caramel_config_parse_color(const char *s, uint32_t *out) {
+bool manju_config_parse_color(const char *s, uint32_t *out) {
 	if (strlen(s) != 7 || s[0] != '#') {
 		return false;
 	}
@@ -110,7 +110,7 @@ bool caramel_config_parse_color(const char *s, uint32_t *out) {
 	return true;
 }
 
-static bool apply_pair(struct caramel_config *cfg, const char *key,
+static bool apply_pair(struct manju_config *cfg, const char *key,
 	const char *value, const char *name, int line, char *err,
 	size_t err_size) {
 	char text[PATH_MAX];
@@ -125,7 +125,7 @@ static bool apply_pair(struct caramel_config *cfg, const char *key,
 		return true;
 	}
 	if (strcmp(key, "color") == 0) {
-		if (!caramel_config_parse_color(text, &cfg->color)) {
+		if (!manju_config_parse_color(text, &cfg->color)) {
 			snprintf(err, err_size,
 				"%s:%d: color must be \"#rrggbb\"", name, line);
 			return false;
@@ -133,7 +133,7 @@ static bool apply_pair(struct caramel_config *cfg, const char *key,
 		return true;
 	}
 	if (strcmp(key, "fit") == 0) {
-		if (!caramel_fit_from_name(text, &cfg->fit)) {
+		if (!manju_fit_from_name(text, &cfg->fit)) {
 			snprintf(err, err_size,
 				"%s:%d: fit must be \"cover\", \"contain\", "
 				"\"center\", or \"tile\"",
@@ -147,7 +147,7 @@ static bool apply_pair(struct caramel_config *cfg, const char *key,
 	return false;
 }
 
-static bool apply_output_pair(struct caramel_config_output *output,
+static bool apply_output_pair(struct manju_config_output *output,
 	const char *key, const char *value, const char *name, int line,
 	char *err, size_t err_size) {
 	char text[PATH_MAX];
@@ -161,7 +161,7 @@ static bool apply_output_pair(struct caramel_config_output *output,
 		return true;
 	}
 	if (strcmp(key, "fit") == 0) {
-		if (!caramel_fit_from_name(text, &output->fit)) {
+		if (!manju_fit_from_name(text, &output->fit)) {
 			snprintf(err, err_size,
 				"%s:%d: fit must be \"cover\", \"contain\", "
 				"\"center\", or \"tile\"",
@@ -176,7 +176,7 @@ static bool apply_output_pair(struct caramel_config_output *output,
 	return false;
 }
 
-static struct caramel_config_output *parse_section(struct caramel_config *cfg,
+static struct manju_config_output *parse_section(struct manju_config *cfg,
 	char *line, const char *name, int lineno, char *err, size_t err_size) {
 	char *close = strchr(line, ']');
 	const char *after = close != NULL ? close + 1 : NULL;
@@ -210,24 +210,24 @@ static struct caramel_config_output *parse_section(struct caramel_config *cfg,
 			return &cfg->outputs[i];
 		}
 	}
-	if (cfg->output_count >= CARAMEL_CONFIG_MAX_OUTPUTS) {
+	if (cfg->output_count >= MANJU_CONFIG_MAX_OUTPUTS) {
 		snprintf(err, err_size, "%s:%d: too many [output] sections",
 			name, lineno);
 		return NULL;
 	}
-	struct caramel_config_output *out = &cfg->outputs[cfg->output_count++];
+	struct manju_config_output *out = &cfg->outputs[cfg->output_count++];
 	memcpy(out->name, output_name, strlen(output_name) + 1);
 	out->image[0] = '\0';
-	out->fit = CARAMEL_FIT_COVER;
+	out->fit = MANJU_FIT_COVER;
 	out->has_fit = false;
 	return out;
 }
 
-bool caramel_config_parse(FILE *fp, const char *name,
-	struct caramel_config *cfg, char *err, size_t err_size) {
+bool manju_config_parse(FILE *fp, const char *name, struct manju_config *cfg,
+	char *err, size_t err_size) {
 	char buffer[CONFIG_LINE_MAX];
 	int line = 0;
-	struct caramel_config_output *current = NULL;
+	struct manju_config_output *current = NULL;
 	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
 		line++;
 		if (strchr(buffer, '\n') == NULL && feof(fp) == 0) {
@@ -276,27 +276,26 @@ bool caramel_config_parse(FILE *fp, const char *name,
 	return true;
 }
 
-bool caramel_config_path(char *out, size_t out_size) {
+bool manju_config_path(char *out, size_t out_size) {
 	const char *xdg = getenv("XDG_CONFIG_HOME");
 	if (xdg != NULL && xdg[0] != '\0') {
-		int n = snprintf(out, out_size, "%s/caramel/config.toml", xdg);
+		int n = snprintf(out, out_size, "%s/manju/config.toml", xdg);
 		return n > 0 && (size_t)n < out_size;
 	}
 	const char *home = getenv("HOME");
 	if (home != NULL && home[0] != '\0') {
 		int n = snprintf(
-			out, out_size, "%s/.config/caramel/config.toml", home);
+			out, out_size, "%s/.config/manju/config.toml", home);
 		return n > 0 && (size_t)n < out_size;
 	}
 	return false;
 }
 
-bool caramel_config_load(
-	struct caramel_config *cfg, char *err, size_t err_size) {
-	caramel_config_defaults(cfg);
+bool manju_config_load(struct manju_config *cfg, char *err, size_t err_size) {
+	manju_config_defaults(cfg);
 
 	char path[PATH_MAX];
-	if (!caramel_config_path(path, sizeof(path))) {
+	if (!manju_config_path(path, sizeof(path))) {
 		return true;
 	}
 
@@ -309,10 +308,10 @@ bool caramel_config_load(
 		return false;
 	}
 
-	bool ok = caramel_config_parse(fp, path, cfg, err, err_size);
+	bool ok = manju_config_parse(fp, path, cfg, err, err_size);
 	fclose(fp);
 	if (!ok) {
-		caramel_config_defaults(cfg);
+		manju_config_defaults(cfg);
 	}
 	return ok;
 }

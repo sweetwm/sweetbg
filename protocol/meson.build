@@ -1,5 +1,5 @@
 # Generate Wayland client glue with wayland-scanner. xdg-shell is generated
-# only so wlr-layer-shell's xdg_popup references resolve at link time; caramel
+# only so wlr-layer-shell's xdg_popup references resolve at link time; manju
 # does not use xdg-shell directly.
 
 wl_protocol_dir = wayland_protos.get_variable('pkgdatadir')
@@ -32,15 +32,15 @@ foreach xml : protocols
 	)
 endforeach
 
-caramel_protocols = static_library(
-	'caramel-protocols',
+manju_protocols = static_library(
+	'manju-protocols',
 	protocol_src,
 	protocol_headers,
 	dependencies: wayland_client,
 )
 
-caramel_protocols_dep = declare_dependency(
-	link_with: caramel_protocols,
+manju_protocols_dep = declare_dependency(
+	link_with: manju_protocols,
 	# listing the headers as sources makes their build dir an include path
 	sources: protocol_headers,
 )

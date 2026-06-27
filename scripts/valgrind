@@ -21,4 +21,4 @@ valgrind \
 	--show-leak-kinds=definite,possible \
 	--track-origins=yes \
 	--error-exitcode=125 \
-	./build-valgrind/carameld --version
+	./build-valgrind/manjud --version

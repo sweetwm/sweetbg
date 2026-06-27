@@ -19,23 +19,22 @@ static bool valid_output_arg(const char *output) {
 static int cmd_img(const char *arg, const char *output, bool persist) {
 	char resolved[PATH_MAX];
 	if (realpath(arg, resolved) == NULL) {
-		fprintf(stderr, "caramel: cannot use '%s': %s\n", arg,
+		fprintf(stderr, "manju: cannot use '%s': %s\n", arg,
 			strerror(errno));
 		return 1;
 	}
 	if (output != NULL && !valid_output_arg(output)) {
-		fprintf(stderr, "caramel: invalid --output name\n");
+		fprintf(stderr, "manju: invalid --output name\n");
 		return 2;
 	}
-	int rc = caramel_client_set_image(resolved, output);
+	int rc = manju_client_set_image(resolved, output);
 	if (rc != 0 || !persist) {
 		return rc;
 	}
 	char err[256];
-	if (!caramel_config_persist_image(output, resolved, err, sizeof(err))) {
+	if (!manju_config_persist_image(output, resolved, err, sizeof(err))) {
 		fprintf(stderr,
-			"caramel: applied but could not save config: %s\n",
-			err);
+			"manju: applied but could not save config: %s\n", err);
 		return 1;
 	}
 	return 0;
@@ -75,7 +74,7 @@ static int run_img(int argc, char **argv) {
 		if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
 			if (i + 1 >= argc) {
 				fprintf(stderr,
-					"caramel: --output needs a name\n");
+					"manju: --output needs a name\n");
 				return 2;
 			}
 			flag_output = argv[++i];
@@ -86,30 +85,28 @@ static int run_img(int argc, char **argv) {
 			continue;
 		}
 		if (a[0] == '-' && a[1] != '\0') {
-			fprintf(stderr, "caramel: unknown img option '%s'\n",
-				a);
+			fprintf(stderr, "manju: unknown img option '%s'\n", a);
 			return 2;
 		}
 
 		struct img_override token;
 		if (is_override_token(a, &token)) {
 			if (override_count >= MAX_IMG_OVERRIDES) {
-				fprintf(stderr, "caramel: too many outputs\n");
+				fprintf(stderr, "manju: too many outputs\n");
 				return 2;
 			}
 			overrides[override_count++] = token;
 		} else if (default_path == NULL) {
 			default_path = a;
 		} else {
-			fprintf(stderr,
-				"caramel: img takes one default path\n");
+			fprintf(stderr, "manju: img takes one default path\n");
 			return 2;
 		}
 	}
 
 	if (flag_output != NULL) {
 		if (override_count > 0 || default_path == NULL) {
-			fprintf(stderr, "caramel: use either '--output <name>' "
+			fprintf(stderr, "manju: use either '--output <name>' "
 					"with one path or <name>=<path> "
 					"arguments\n");
 			return 2;
@@ -118,9 +115,8 @@ static int run_img(int argc, char **argv) {
 	}
 
 	if (default_path == NULL && override_count == 0) {
-		fprintf(stderr,
-			"usage: caramel img <path> | <name>=<path>... | "
-			"<path> --output <name>\n");
+		fprintf(stderr, "usage: manju img <path> | <name>=<path>... | "
+				"<path> --output <name>\n");
 		return 2;
 	}
 
@@ -131,7 +127,7 @@ static int run_img(int argc, char **argv) {
 	for (int i = 0; i < override_count; i++) {
 		char name[64];
 		if (overrides[i].name_len >= sizeof(name)) {
-			fprintf(stderr, "caramel: invalid output name\n");
+			fprintf(stderr, "manju: invalid output name\n");
 			rc = 2;
 			continue;
 		}
@@ -154,7 +150,7 @@ static int cmd_set(int argc, char **argv) {
 		} else if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
 			if (i + 1 >= argc) {
 				fprintf(stderr,
-					"caramel: --output needs a name\n");
+					"manju: --output needs a name\n");
 				return 2;
 			}
 			output = argv[++i];
@@ -165,18 +161,18 @@ static int cmd_set(int argc, char **argv) {
 		} else if (value == NULL) {
 			value = a;
 		} else {
-			fprintf(stderr, "caramel: set takes <field> <value>\n");
+			fprintf(stderr, "manju: set takes <field> <value>\n");
 			return 2;
 		}
 	}
 	if (field == NULL || value == NULL) {
-		fprintf(stderr, "usage: caramel set fit <mode> | "
+		fprintf(stderr, "usage: manju set fit <mode> | "
 				"color <#rrggbb> [--output <name>] "
 				"[--persist]\n");
 		return 2;
 	}
 	if (output != NULL && !valid_output_arg(output)) {
-		fprintf(stderr, "caramel: invalid --output name\n");
+		fprintf(stderr, "manju: invalid --output name\n");
 		return 2;
 	}
 
@@ -185,69 +181,68 @@ static int cmd_set(int argc, char **argv) {
 	char canon[16];
 	const char *persist_value;
 	if (strcmp(field, "fit") == 0) {
-		enum caramel_fit fit;
-		if (!caramel_fit_from_name(value, &fit)) {
-			fprintf(stderr, "caramel: fit must be cover, contain, "
+		enum manju_fit fit;
+		if (!manju_fit_from_name(value, &fit)) {
+			fprintf(stderr, "manju: fit must be cover, contain, "
 					"center, or tile\n");
 			return 2;
 		}
-		set_field = CARAMEL_SET_FIT;
+		set_field = MANJU_SET_FIT;
 		set_value = (uint32_t)fit;
-		persist_value = caramel_fit_name(fit);
+		persist_value = manju_fit_name(fit);
 	} else if (strcmp(field, "color") == 0) {
 		if (output != NULL) {
-			fprintf(stderr, "caramel: color cannot be scoped to an "
+			fprintf(stderr, "manju: color cannot be scoped to an "
 					"output\n");
 			return 2;
 		}
 		uint32_t color;
-		if (!caramel_config_parse_color(value, &color)) {
-			fprintf(stderr, "caramel: color must be \"#rrggbb\"\n");
+		if (!manju_config_parse_color(value, &color)) {
+			fprintf(stderr, "manju: color must be \"#rrggbb\"\n");
 			return 2;
 		}
-		set_field = CARAMEL_SET_COLOR;
+		set_field = MANJU_SET_COLOR;
 		set_value = color;
 		snprintf(canon, sizeof(canon), "#%06x", color & 0xffffffu);
 		persist_value = canon;
 	} else {
 		fprintf(stderr,
-			"caramel: unknown set field '%s' (use fit or color)\n",
+			"manju: unknown set field '%s' (use fit or color)\n",
 			field);
 		return 2;
 	}
 
 	uint8_t payload[12 + 63];
-	caramel_put_u32(payload, set_field);
-	caramel_put_u32(payload + 4, set_value);
+	manju_put_u32(payload, set_field);
+	manju_put_u32(payload + 4, set_value);
 	uint32_t payload_len = 8;
 	if (output != NULL) {
 		size_t output_len = strlen(output);
-		caramel_put_u32(payload + 8, (uint32_t)output_len);
+		manju_put_u32(payload + 8, (uint32_t)output_len);
 		// NOLINTNEXTLINE(bugprone-not-null-terminated-result)
 		memcpy(payload + 12, output, output_len);
 		payload_len = (uint32_t)(12 + output_len);
 	}
-	int rc = caramel_client_request(CARAMEL_CMD_SET, payload, payload_len);
+	int rc = manju_client_request(MANJU_CMD_SET, payload, payload_len);
 	if (rc != 0 || !persist) {
 		return rc;
 	}
 	char err[256];
 	bool saved = output == NULL
-			     ? caramel_config_persist_setting(
+			     ? manju_config_persist_setting(
 				       field, persist_value, err, sizeof(err))
-			     : caramel_config_persist_output_setting(output,
+			     : manju_config_persist_output_setting(output,
 				       field, persist_value, err, sizeof(err));
 	if (!saved) {
 		fprintf(stderr,
-			"caramel: applied but could not save config: %s\n",
-			err);
+			"manju: applied but could not save config: %s\n", err);
 		return 1;
 	}
 	return 0;
 }
 
 static void usage(FILE *out) {
-	fputs("usage: caramel <command> [args]\n"
+	fputs("usage: manju <command> [args]\n"
 	      "\n"
 	      "commands:\n"
 	      "  img <path>                 set the wallpaper on all outputs\n"
@@ -285,12 +280,12 @@ int main(int argc, char **argv) {
 	}
 
 	if (strcmp(cmd, "-V") == 0 || strcmp(cmd, "--version") == 0) {
-		printf("caramel %s\n", CARAMEL_VERSION);
+		printf("manju %s\n", MANJU_VERSION);
 		return 0;
 	}
 
 	if (strcmp(cmd, "stop") == 0) {
-		return caramel_client_request(CARAMEL_CMD_STOP, NULL, 0);
+		return manju_client_request(MANJU_CMD_STOP, NULL, 0);
 	}
 
 	if (strcmp(cmd, "img") == 0) {
@@ -304,17 +299,17 @@ int main(int argc, char **argv) {
 	if (strcmp(cmd, "prepare") == 0) {
 		if (argc < 4) {
 			fprintf(stderr,
-				"usage: caramel prepare <output> <path>\n");
+				"usage: manju prepare <output> <path>\n");
 			return 2;
 		}
-		return caramel_client_prepare_output(argv[2], argv[3]);
+		return manju_client_prepare_output(argv[2], argv[3]);
 	}
 
 	if (strcmp(cmd, "query") == 0) {
-		return caramel_client_request(CARAMEL_CMD_QUERY, NULL, 0);
+		return manju_client_request(MANJU_CMD_QUERY, NULL, 0);
 	}
 
-	fprintf(stderr, "caramel: unknown command '%s'\n", cmd);
+	fprintf(stderr, "manju: unknown command '%s'\n", cmd);
 	usage(stderr);
 	return 2;
 }

@@ -21,7 +21,7 @@ static uint32_t min_u32(uint32_t a, uint32_t b) {
 
 static void handle_global(void *data, struct wl_registry *registry,
 	uint32_t name, const char *interface, uint32_t version) {
-	struct caramel_registry *reg = data;
+	struct manju_registry *reg = data;
 
 	if (strcmp(interface, wl_compositor_interface.name) == 0) {
 		reg->compositor = wl_registry_bind(registry, name,
@@ -44,15 +44,15 @@ static void handle_global(void *data, struct wl_registry *registry,
 			&wp_fractional_scale_manager_v1_interface,
 			FRACTIONAL_SCALE_VERSION);
 	} else if (strcmp(interface, wl_output_interface.name) == 0) {
-		caramel_output_create(&reg->outputs, registry, name, version);
+		manju_output_create(&reg->outputs, registry, name, version);
 	}
 }
 
 static void handle_global_remove(
 	void *data, struct wl_registry *registry, uint32_t name) {
-	struct caramel_registry *reg = data;
+	struct manju_registry *reg = data;
 	(void)registry;
-	caramel_output_remove(&reg->outputs, name);
+	manju_output_remove(&reg->outputs, name);
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -60,8 +60,8 @@ static const struct wl_registry_listener registry_listener = {
 	.global_remove = handle_global_remove,
 };
 
-bool caramel_registry_init(
-	struct caramel_registry *reg, struct wl_display *display) {
+bool manju_registry_init(
+	struct manju_registry *reg, struct wl_display *display) {
 	reg->registry = NULL;
 	reg->compositor = NULL;
 	reg->shm = NULL;
@@ -72,8 +72,7 @@ bool caramel_registry_init(
 
 	reg->registry = wl_display_get_registry(display);
 	if (reg->registry == NULL) {
-		fprintf(stderr,
-			"carameld: failed to get the wayland registry\n");
+		fprintf(stderr, "manjud: failed to get the wayland registry\n");
 		return false;
 	}
 
@@ -81,23 +80,22 @@ bool caramel_registry_init(
 
 	// One roundtrip is enough to receive every global the server advertises
 	if (wl_display_roundtrip(display) < 0) {
-		fprintf(stderr, "carameld: wayland roundtrip failed\n");
+		fprintf(stderr, "manjud: wayland roundtrip failed\n");
 		return false;
 	}
 
 	bool ok = true;
 	if (reg->compositor == NULL) {
 		fprintf(stderr,
-			"carameld: compositor does not expose wl_compositor\n");
+			"manjud: compositor does not expose wl_compositor\n");
 		ok = false;
 	}
 	if (reg->shm == NULL) {
-		fprintf(stderr,
-			"carameld: compositor does not expose wl_shm\n");
+		fprintf(stderr, "manjud: compositor does not expose wl_shm\n");
 		ok = false;
 	}
 	if (reg->layer_shell == NULL) {
-		fprintf(stderr, "carameld: compositor lacks wlr-layer-shell "
+		fprintf(stderr, "manjud: compositor lacks wlr-layer-shell "
 				"(zwlr_layer_shell_v1)\n");
 		ok = false;
 	}
@@ -107,15 +105,15 @@ bool caramel_registry_init(
 	}
 
 	if (wl_display_roundtrip(display) < 0) {
-		fprintf(stderr, "carameld: wayland roundtrip failed\n");
+		fprintf(stderr, "manjud: wayland roundtrip failed\n");
 		return false;
 	}
 
 	return true;
 }
 
-void caramel_registry_finish(struct caramel_registry *reg) {
-	caramel_outputs_finish(&reg->outputs);
+void manju_registry_finish(struct manju_registry *reg) {
+	manju_outputs_finish(&reg->outputs);
 	if (reg->fractional_scale_manager != NULL) {
 		wp_fractional_scale_manager_v1_destroy(
 			reg->fractional_scale_manager);

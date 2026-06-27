@@ -1,5 +1,5 @@
-#ifndef CARAMEL_CONFIG_CONFIG_H
-#define CARAMEL_CONFIG_CONFIG_H
+#ifndef MANJU_CONFIG_CONFIG_H
+#define MANJU_CONFIG_CONFIG_H
 
 #include <limits.h>
 #include <stdbool.h>
@@ -7,42 +7,41 @@
 #include <stdint.h>
 #include <stdio.h>
 
-enum caramel_fit {
-	CARAMEL_FIT_COVER,
-	CARAMEL_FIT_CONTAIN,
-	CARAMEL_FIT_CENTER,
-	CARAMEL_FIT_TILE,
+enum manju_fit {
+	MANJU_FIT_COVER,
+	MANJU_FIT_CONTAIN,
+	MANJU_FIT_CENTER,
+	MANJU_FIT_TILE,
 };
 
-const char *caramel_fit_name(enum caramel_fit fit);
+const char *manju_fit_name(enum manju_fit fit);
 
-bool caramel_fit_from_name(const char *name, enum caramel_fit *out);
+bool manju_fit_from_name(const char *name, enum manju_fit *out);
 
-bool caramel_config_parse_color(const char *s, uint32_t *out);
+bool manju_config_parse_color(const char *s, uint32_t *out);
 
-#define CARAMEL_CONFIG_MAX_OUTPUTS 16
+#define MANJU_CONFIG_MAX_OUTPUTS 16
 
-struct caramel_config_output {
+struct manju_config_output {
 	char name[64];
 	char image[PATH_MAX];
-	enum caramel_fit fit;
+	enum manju_fit fit;
 	bool has_fit;
 };
 
-struct caramel_config {
+struct manju_config {
 	char image[PATH_MAX];
 	uint32_t color;
-	enum caramel_fit fit;
-	struct caramel_config_output outputs[CARAMEL_CONFIG_MAX_OUTPUTS];
+	enum manju_fit fit;
+	struct manju_config_output outputs[MANJU_CONFIG_MAX_OUTPUTS];
 	size_t output_count;
 };
 
-void caramel_config_defaults(struct caramel_config *cfg);
-bool caramel_config_load(
-	struct caramel_config *cfg, char *err, size_t err_size);
-bool caramel_config_parse(FILE *fp, const char *name,
-	struct caramel_config *cfg, char *err, size_t err_size);
+void manju_config_defaults(struct manju_config *cfg);
+bool manju_config_load(struct manju_config *cfg, char *err, size_t err_size);
+bool manju_config_parse(FILE *fp, const char *name, struct manju_config *cfg,
+	char *err, size_t err_size);
 
-bool caramel_config_path(char *out, size_t out_size);
+bool manju_config_path(char *out, size_t out_size);
 
 #endif

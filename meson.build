@@ -1,5 +1,5 @@
 project(
-	'caramel',
+	'manju',
 	'c',
 	version: '0.1.0',
 	meson_version: '>= 0.60.0',
@@ -11,7 +11,7 @@ project(
 )
 
 add_project_arguments(
-	'-DCARAMEL_VERSION="' + meson.project_version() + '"',
+	'-DMANJU_VERSION="' + meson.project_version() + '"',
 	# Linux-only daemon; enable memfd_create and the POSIX surface
 	'-D_GNU_SOURCE',
 	language: 'c',
@@ -30,18 +30,18 @@ wayland_scanner = find_program(
 
 subdir('protocol')
 
-caramel_inc = include_directories('src')
+manju_inc = include_directories('src')
 
 # Framing protocol shared by the client and daemon
 ipc_proto = static_library(
-	'caramel-ipc',
+	'manju-ipc',
 	'src/ipc/protocol.c',
-	include_directories: caramel_inc,
+	include_directories: manju_inc,
 )
 
 executable(
-	'caramel',
-	'src/caramel.c',
+	'manju',
+	'src/manju.c',
 	'src/ipc/client.c',
 	'src/image/image.c',
 	'src/image/fit.c',
@@ -50,24 +50,24 @@ executable(
 	'src/image/webp.c',
 	'src/config/config.c',
 	'src/config/config_write.c',
-	include_directories: caramel_inc,
+	include_directories: manju_inc,
 	link_with: ipc_proto,
 	dependencies: [libpng, libjpeg, libwebp],
 	install: true,
 )
 
 executable(
-	'carameld',
-	'src/carameld.c',
+	'manjud',
+	'src/manjud.c',
 	'src/wayland/registry.c',
 	'src/wayland/output.c',
 	'src/wayland/surface.c',
 	'src/wayland/shm.c',
 	'src/ipc/server.c',
 	'src/config/config.c',
-	include_directories: caramel_inc,
+	include_directories: manju_inc,
 	link_with: ipc_proto,
-	dependencies: [wayland_client, caramel_protocols_dep],
+	dependencies: [wayland_client, manju_protocols_dep],
 	install: true,
 )
 

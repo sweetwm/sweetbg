@@ -1,13 +1,13 @@
 [Unit]
-Description=Caramel Wayland wallpaper daemon
-Documentation=man:carameld(1)
+Description=Manju Wayland wallpaper daemon
+Documentation=man:manjud(1)
 PartOf=graphical-session.target
 After=graphical-session.target
 Requisite=graphical-session.target
 
 [Service]
 Type=exec
-ExecStart=carameld
+ExecStart=manjud
 Restart=on-failure
 Slice=session.slice
 

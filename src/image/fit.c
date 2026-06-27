@@ -1,7 +1,7 @@
 #include "image/fit.h"
 
-void caramel_cover_rect(uint32_t src_w, uint32_t src_h, uint32_t out_w,
-	uint32_t out_h, struct caramel_rect *out) {
+void manju_cover_rect(uint32_t src_w, uint32_t src_h, uint32_t out_w,
+	uint32_t out_h, struct manju_rect *out) {
 	uint64_t src_by_out = (uint64_t)src_w * out_h;
 	uint64_t out_by_src = (uint64_t)out_w * src_h;
 
@@ -26,8 +26,8 @@ void caramel_cover_rect(uint32_t src_w, uint32_t src_h, uint32_t out_w,
 	}
 }
 
-void caramel_contain_rects(uint32_t src_w, uint32_t src_h, uint32_t out_w,
-	uint32_t out_h, struct caramel_placement *out) {
+void manju_contain_rects(uint32_t src_w, uint32_t src_h, uint32_t out_w,
+	uint32_t out_h, struct manju_placement *out) {
 	out->src.x = 0;
 	out->src.y = 0;
 	out->src.w = src_w;
@@ -58,8 +58,8 @@ void caramel_contain_rects(uint32_t src_w, uint32_t src_h, uint32_t out_w,
 	out->dst.y = (out_h - dst_h) / 2;
 }
 
-void caramel_center_rects(uint32_t src_w, uint32_t src_h, uint32_t out_w,
-	uint32_t out_h, struct caramel_placement *out) {
+void manju_center_rects(uint32_t src_w, uint32_t src_h, uint32_t out_w,
+	uint32_t out_h, struct manju_placement *out) {
 	uint32_t vis_w = src_w < out_w ? src_w : out_w;
 	uint32_t vis_h = src_h < out_h ? src_h : out_h;
 

@@ -1,6 +1,6 @@
-# Caramel configuration
-# Place this file at $XDG_CONFIG_HOME/caramel/config.toml
-# (or ~/.config/caramel/config.toml). All keys are optional.
+# Manju configuration
+# Place this file at $XDG_CONFIG_HOME/manju/config.toml
+# (or ~/.config/manju/config.toml). All keys are optional.
 
 # Wallpaper shown at startup. Must be an absolute path to a JPEG, PNG, or WebP.
 image = "/home/me/Pictures/wallpaper.jpg"
@@ -17,7 +17,7 @@ color = "#1e1e2e"
 fit = "cover"
 
 # Per-output sections override defaults for a single output.
-# The name is what `caramel query` reports (e.g. DP-1, HDMI-A-1).
+# The name is what `manju query` reports (e.g. DP-1, HDMI-A-1).
 # [output.DP-1]
 # image = "/home/me/Pictures/left.jpg"
 # fit = "contain"

@@ -16,6 +16,7 @@ enum manju_ipc_command {
 	MANJU_CMD_QUERY_OUTPUTS = 4,
 	MANJU_CMD_IMG_PREPARED = 5,
 	MANJU_CMD_SET = 6,
+	MANJU_CMD_CLEAR = 7,
 };
 
 enum manju_set_field {
@@ -34,6 +35,11 @@ enum manju_img_mode {
 	MANJU_IMG_DEFAULT = 0,
 	MANJU_IMG_OVERRIDE = 1,
 	MANJU_IMG_REPAINT = 2,
+};
+
+enum manju_clear_flags {
+	MANJU_CLEAR_IMAGE = 1u << 0,
+	MANJU_CLEAR_FIT = 1u << 1,
 };
 
 void manju_put_u32(uint8_t *p, uint32_t value);

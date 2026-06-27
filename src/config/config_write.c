@@ -193,6 +193,66 @@ static bool patch_key(const char *input, const char *section, const char *key,
 	return true;
 }
 
+static bool section_is_output(const char *section) {
+	return strncmp(section, "output.", 7) == 0 && section[7] != '\0';
+}
+
+static bool patch_remove_key(const char *input, const char *section,
+	bool output_sections, const char *key, char **out, char *err,
+	size_t err_size) {
+	char *buf = NULL;
+	size_t buf_size = 0;
+	FILE *ms = open_memstream(&buf, &buf_size);
+	if (ms == NULL) {
+		snprintf(err, err_size, "out of memory");
+		return false;
+	}
+
+	bool target_default = section == NULL && !output_sections;
+	enum { SCOPE_TOP, SCOPE_TARGET, SCOPE_OTHER } scope = SCOPE_TOP;
+	bool at_start = true;
+	bool any = false;
+
+	const char *p = input != NULL ? input : "";
+	while (*p != '\0') {
+		const char *eol = strchr(p, '\n');
+		size_t linelen =
+			eol != NULL ? (size_t)(eol - p) + 1 : strlen(p);
+
+		char t[CONFIG_LINE_MAX];
+		logical_line(p, linelen, t, sizeof(t));
+
+		char secname[SECTION_NAME_MAX];
+		if (is_section(t, secname, sizeof(secname))) {
+			bool target_section =
+				(output_sections &&
+					section_is_output(secname)) ||
+				(section != NULL &&
+					strcmp(secname, section) == 0);
+			scope = target_section ? SCOPE_TARGET : SCOPE_OTHER;
+			emit(ms, p, linelen, &at_start, &any);
+		} else {
+			bool want_scope = target_default
+						  ? scope == SCOPE_TOP
+						  : scope == SCOPE_TARGET;
+			if (want_scope && line_has_key(t, key)) {
+				p += linelen;
+				continue;
+			}
+			emit(ms, p, linelen, &at_start, &any);
+		}
+		p += linelen;
+	}
+
+	if (fclose(ms) != 0) {
+		free(buf);
+		snprintf(err, err_size, "out of memory");
+		return false;
+	}
+	*out = buf;
+	return true;
+}
+
 bool manju_config_patch_image(const char *input, const char *output_name,
 	const char *image_path, char **out, char *err, size_t err_size) {
 	if (output_name == NULL) {
@@ -224,6 +284,40 @@ bool manju_config_patch_output_setting(const char *input,
 	char section[SECTION_NAME_MAX];
 	snprintf(section, sizeof(section), "output.%s", output_name);
 	return patch_key(input, section, key, value, out, err, err_size);
+}
+
+static bool patch_clear_key(const char *input, const char *output_name,
+	const char *key, char **out, char *err, size_t err_size) {
+	if (output_name != NULL) {
+		if (!valid_output_name(output_name)) {
+			snprintf(err, err_size, "invalid output name");
+			return false;
+		}
+		char section[SECTION_NAME_MAX];
+		snprintf(section, sizeof(section), "output.%s", output_name);
+		return patch_remove_key(
+			input, section, false, key, out, err, err_size);
+	}
+
+	char *without_default = NULL;
+	if (!patch_remove_key(
+		    input, NULL, false, key, &without_default, err, err_size)) {
+		return false;
+	}
+	bool ok = patch_remove_key(
+		without_default, NULL, true, key, out, err, err_size);
+	free(without_default);
+	return ok;
+}
+
+bool manju_config_patch_clear_image(const char *input, const char *output_name,
+	char **out, char *err, size_t err_size) {
+	return patch_clear_key(input, output_name, "image", out, err, err_size);
+}
+
+bool manju_config_patch_clear_fit(const char *input, const char *output_name,
+	char **out, char *err, size_t err_size) {
+	return patch_clear_key(input, output_name, "fit", out, err, err_size);
 }
 
 static bool read_config(
@@ -390,4 +484,42 @@ bool manju_config_persist_output_setting(const char *output_name,
 	char section[SECTION_NAME_MAX];
 	snprintf(section, sizeof(section), "output.%s", output_name);
 	return persist_core(section, key, value, err, err_size);
+}
+
+static bool persist_clear_core(
+	const char *output_name, const char *key, char *err, size_t err_size) {
+	char path[PATH_MAX];
+	if (!manju_config_path(path, sizeof(path))) {
+		snprintf(err, err_size,
+			"cannot resolve config path (set XDG_CONFIG_HOME or "
+			"HOME)");
+		return false;
+	}
+
+	char *content = NULL;
+	if (!read_config(path, &content, err, err_size)) {
+		return false;
+	}
+
+	char *patched = NULL;
+	bool ok = patch_clear_key(
+		content, output_name, key, &patched, err, err_size);
+	free(content);
+	if (!ok) {
+		return false;
+	}
+
+	ok = write_atomic(path, patched, err, err_size);
+	free(patched);
+	return ok;
+}
+
+bool manju_config_persist_clear_image(
+	const char *output_name, char *err, size_t err_size) {
+	return persist_clear_core(output_name, "image", err, err_size);
+}
+
+bool manju_config_persist_clear_fit(
+	const char *output_name, char *err, size_t err_size) {
+	return persist_clear_core(output_name, "fit", err, err_size);
 }

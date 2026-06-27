@@ -17,10 +17,22 @@ bool manju_config_patch_output_setting(const char *input,
 	const char *output_name, const char *key, const char *value, char **out,
 	char *err, size_t err_size);
 
+bool manju_config_patch_clear_image(const char *input, const char *output_name,
+	char **out, char *err, size_t err_size);
+
+bool manju_config_patch_clear_fit(const char *input, const char *output_name,
+	char **out, char *err, size_t err_size);
+
 bool manju_config_persist_setting(
 	const char *key, const char *value, char *err, size_t err_size);
 
 bool manju_config_persist_output_setting(const char *output_name,
 	const char *key, const char *value, char *err, size_t err_size);
+
+bool manju_config_persist_clear_image(
+	const char *output_name, char *err, size_t err_size);
+
+bool manju_config_persist_clear_fit(
+	const char *output_name, char *err, size_t err_size);
 
 #endif

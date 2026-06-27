@@ -51,6 +51,21 @@ parses arguments, sends one request, prints the response, and returns.
 	Either *set* form accepts *--persist* to also save the change to the
 	config file.
 
+*clear* [*--image*] [*--fit*] [*--output* <name>]
+	Clear runtime wallpaper state. With no target options, this clears the
+	default image and all per-output image overrides, returning configured
+	outputs to the background color.
+
+	With *--output* <name>, image clearing removes only that output's image
+	override, so it falls back to the default image or background color.
+	*--fit* clears fit state instead: with *--output*, it removes that
+	output's fit override; without *--output*, it resets the default fit to
+	_cover_ and clears runtime per-output fit overrides. Pass both *--image*
+	and *--fit* to clear both kinds of state.
+
+	Pass *--persist* to also remove the matching saved keys from the config
+	file.
+
 *query*
 	Print the current default wallpaper (image path or placeholder color) and
 	the default fit mode, followed by one line per output with its name,
@@ -62,12 +77,13 @@ parses arguments, sends one request, prints the response, and returns.
 # OPTIONS
 
 *-o*, *--output* <name>
-	Restrict *img* or *set fit* to a single output.
+	Restrict *img*, *set fit*, or *clear* to a single output.
 
 *-p*, *--persist*
-	Save the applied *img* or *set* change to the config file. Updates only
-	the affected key (top-level default or the matching _[output.<name>]_
-	section) and preserves other keys, comments, and sections.
+	Save the applied *img*, *set*, or *clear* change to the config file.
+	Updates or removes only the affected key (top-level default or the
+	matching _[output.<name>]_ section) and preserves other keys, comments,
+	and sections.
 
 *-h*, *--help*
 	Show usage and exit.

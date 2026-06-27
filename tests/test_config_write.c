@@ -68,6 +68,42 @@ static int expect_output_setting(const char *input, const char *output_name,
 	return rc;
 }
 
+static int expect_clear_image(
+	const char *input, const char *output_name, const char *want) {
+	char *out = NULL;
+	char err[256];
+	if (!manju_config_patch_clear_image(
+		    input, output_name, &out, err, sizeof(err))) {
+		fprintf(stderr, "patch failed: %s\n", err);
+		return 1;
+	}
+	int rc = 0;
+	if (strcmp(out, want) != 0) {
+		fprintf(stderr, "got:\n%s\nwant:\n%s\n", out, want);
+		rc = 1;
+	}
+	free(out);
+	return rc;
+}
+
+static int expect_clear_fit(
+	const char *input, const char *output_name, const char *want) {
+	char *out = NULL;
+	char err[256];
+	if (!manju_config_patch_clear_fit(
+		    input, output_name, &out, err, sizeof(err))) {
+		fprintf(stderr, "patch failed: %s\n", err);
+		return 1;
+	}
+	int rc = 0;
+	if (strcmp(out, want) != 0) {
+		fprintf(stderr, "got:\n%s\nwant:\n%s\n", out, want);
+		rc = 1;
+	}
+	free(out);
+	return rc;
+}
+
 static int test_replace_default(void) {
 	return expect("color = \"#111111\"\n"
 		      "image = \"/old.jpg\"\n"
@@ -168,6 +204,60 @@ static int test_set_append_output(void) {
 		"fit = \"contain\"\n");
 }
 
+static int test_clear_all_images(void) {
+	return expect_clear_image("image = \"/default.jpg\"\n"
+				  "color = \"#101010\"\n"
+				  "[output.DP-1]\n"
+				  "image = \"/left.jpg\"\n"
+				  "fit = \"contain\"\n"
+				  "[output.HDMI-A-1]\n"
+				  "# keep the section\n"
+				  "image = \"/tv.jpg\"\n",
+		NULL,
+		"color = \"#101010\"\n"
+		"[output.DP-1]\n"
+		"fit = \"contain\"\n"
+		"[output.HDMI-A-1]\n"
+		"# keep the section\n");
+}
+
+static int test_clear_one_output_image(void) {
+	return expect_clear_image("image = \"/default.jpg\"\n"
+				  "[output.DP-1]\n"
+				  "image = \"/left.jpg\"\n"
+				  "fit = \"contain\"\n"
+				  "[output.HDMI-A-1]\n"
+				  "image = \"/tv.jpg\"\n",
+		"DP-1",
+		"image = \"/default.jpg\"\n"
+		"[output.DP-1]\n"
+		"fit = \"contain\"\n"
+		"[output.HDMI-A-1]\n"
+		"image = \"/tv.jpg\"\n");
+}
+
+static int test_clear_all_fit(void) {
+	return expect_clear_fit("fit = \"tile\"\n"
+				"image = \"/default.jpg\"\n"
+				"[output.DP-1]\n"
+				"fit = \"contain\"\n"
+				"image = \"/left.jpg\"\n",
+		NULL,
+		"image = \"/default.jpg\"\n"
+		"[output.DP-1]\n"
+		"image = \"/left.jpg\"\n");
+}
+
+static int test_clear_missing_key_keeps_input(void) {
+	return expect_clear_fit("image = \"/default.jpg\"\n"
+				"[output.DP-1]\n"
+				"image = \"/left.jpg\"\n",
+		"DP-1",
+		"image = \"/default.jpg\"\n"
+		"[output.DP-1]\n"
+		"image = \"/left.jpg\"\n");
+}
+
 static int test_rejects_bad_input(void) {
 	char *out = NULL;
 	char err[256];
@@ -179,6 +269,9 @@ static int test_rejects_bad_input(void) {
 		"", "a]b", "/ok.jpg", &out, err, sizeof(err)));
 	CHECK(!manju_config_patch_output_setting(
 		"", "bad name", "fit", "cover", &out, err, sizeof(err)));
+	CHECK(!manju_config_patch_clear_image(
+		"", "bad name", &out, err, sizeof(err)));
+	CHECK(!manju_config_patch_clear_fit("", "a]b", &out, err, sizeof(err)));
 	return 0;
 }
 
@@ -195,6 +288,10 @@ int main(void) {
 	rc |= test_set_insert_before_section();
 	rc |= test_set_replace_output();
 	rc |= test_set_append_output();
+	rc |= test_clear_all_images();
+	rc |= test_clear_one_output_image();
+	rc |= test_clear_all_fit();
+	rc |= test_clear_missing_key_keeps_input();
 	rc |= test_rejects_bad_input();
 	if (rc == 0) {
 		printf("config write: all checks passed\n");

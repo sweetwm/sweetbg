@@ -39,6 +39,8 @@ struct daemon {
 
 static volatile sig_atomic_t g_running = 1;
 
+static void compact_assignments(struct daemon *daemon);
+
 static void handle_signal(int signal_number) {
 	(void)signal_number;
 	g_running = 0;
@@ -103,6 +105,27 @@ static void set_fit_assignment(
 	}
 	entry->fit = fit;
 	entry->has_fit = true;
+}
+
+static bool clear_image_assignment(struct daemon *daemon, const char *name) {
+	struct assignment *entry = assignment_for(daemon, name);
+	if (entry == NULL || !entry->has_image) {
+		return false;
+	}
+	entry->has_image = false;
+	entry->path[0] = '\0';
+	compact_assignments(daemon);
+	return true;
+}
+
+static bool clear_fit_assignment(struct daemon *daemon, const char *name) {
+	struct assignment *entry = assignment_for(daemon, name);
+	if (entry == NULL || !entry->has_fit) {
+		return false;
+	}
+	entry->has_fit = false;
+	compact_assignments(daemon);
+	return true;
 }
 
 static void compact_assignments(struct daemon *daemon) {
@@ -548,6 +571,132 @@ static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 	return MANJU_STATUS_ERR_BAD_REQUEST;
 }
 
+struct clear_request {
+	uint32_t flags;
+	char output[64];
+};
+
+static bool parse_clear(
+	const uint8_t *payload, uint32_t len, struct clear_request *req) {
+	if (len != 8 && len < 9) {
+		return false;
+	}
+	req->flags = manju_get_u32(payload);
+	req->output[0] = '\0';
+	uint32_t output_len = manju_get_u32(payload + 4);
+	if (output_len == 0) {
+		return len == 8;
+	}
+	if (output_len >= sizeof(req->output) || 8 + output_len != len) {
+		return false;
+	}
+	memcpy(req->output, payload + 8, output_len);
+	req->output[output_len] = '\0';
+	return true;
+}
+
+static bool any_image_assignment(const struct daemon *daemon) {
+	for (size_t i = 0; i < daemon->assignment_count; i++) {
+		if (daemon->assignments[i].has_image) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static void mark_all_repaint(struct daemon *daemon) {
+	struct manju_output *output;
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		if (output->surface.configured) {
+			output->surface.needs_repaint = true;
+		}
+	}
+}
+
+static void clear_message(
+	const struct clear_request *req, char *message, size_t message_size) {
+	const bool image = (req->flags & MANJU_CLEAR_IMAGE) != 0;
+	const bool fit = (req->flags & MANJU_CLEAR_FIT) != 0;
+	const char *what = image && fit ? "image and fit"
+			   : image	? "image"
+					: "fit";
+	if (req->output[0] != '\0') {
+		snprintf(message, message_size, "cleared %s for %s", what,
+			req->output);
+	} else {
+		snprintf(message, message_size, "cleared %s", what);
+	}
+}
+
+static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
+	uint32_t len, char *message, size_t message_size) {
+	struct clear_request req;
+	if (!parse_clear(payload, len, &req)) {
+		snprintf(message, message_size, "invalid clear request");
+		return MANJU_STATUS_ERR_BAD_REQUEST;
+	}
+	uint32_t allowed = MANJU_CLEAR_IMAGE | MANJU_CLEAR_FIT;
+	if (req.flags == 0 || (req.flags & ~allowed) != 0) {
+		snprintf(message, message_size, "invalid clear target");
+		return MANJU_STATUS_ERR_BAD_REQUEST;
+	}
+
+	if (req.output[0] != '\0') {
+		struct manju_output *output = find_output(daemon, req.output);
+		if (output == NULL) {
+			snprintf(message, message_size, "no output named %s",
+				req.output);
+			return MANJU_STATUS_ERR_BAD_REQUEST;
+		}
+		const char *old_path = effective_path(daemon, output);
+		bool had_image = old_path[0] != '\0';
+		enum manju_fit old_fit = effective_fit(daemon, output);
+		bool image_changed = false;
+		bool fit_changed = false;
+
+		if ((req.flags & MANJU_CLEAR_IMAGE) != 0) {
+			image_changed =
+				clear_image_assignment(daemon, req.output);
+		}
+		if ((req.flags & MANJU_CLEAR_FIT) != 0) {
+			fit_changed =
+				clear_fit_assignment(daemon, req.output) &&
+				old_fit != effective_fit(daemon, output);
+		}
+		if (image_changed || (fit_changed && had_image &&
+					     output->surface.configured)) {
+			output->surface.needs_repaint = true;
+			reconcile_paint(daemon);
+		}
+		clear_message(&req, message, message_size);
+		return MANJU_STATUS_OK;
+	}
+
+	bool image_changed = false;
+	bool fit_changed = false;
+	if ((req.flags & MANJU_CLEAR_IMAGE) != 0) {
+		image_changed = daemon->default_path[0] != '\0' ||
+				any_image_assignment(daemon);
+		daemon->default_path[0] = '\0';
+		clear_image_assignments(daemon);
+	}
+	if ((req.flags & MANJU_CLEAR_FIT) != 0) {
+		fit_changed = daemon->fit != MANJU_FIT_COVER;
+		if (fit_changed) {
+			daemon->fit = MANJU_FIT_COVER;
+		}
+		fit_changed = clear_fit_assignments(daemon) || fit_changed;
+	}
+	if (image_changed) {
+		mark_all_repaint(daemon);
+		reconcile_paint(daemon);
+	} else if (fit_changed) {
+		repaint_after_change(daemon, false, true);
+	}
+	clear_message(&req, message, message_size);
+	return MANJU_STATUS_OK;
+}
+
 static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 	uint32_t len, int fd, char *message, size_t message_size, bool *stop) {
 	struct daemon *daemon = data;
@@ -564,6 +713,9 @@ static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 			daemon, payload, len, fd, message, message_size);
 	case MANJU_CMD_SET:
 		return handle_set(daemon, payload, len, message, message_size);
+	case MANJU_CMD_CLEAR:
+		return handle_clear(
+			daemon, payload, len, message, message_size);
 	default:
 		snprintf(message, message_size, "unknown command");
 		return MANJU_STATUS_ERR_UNKNOWN_COMMAND;

@@ -241,6 +241,80 @@ static int cmd_set(int argc, char **argv) {
 	return 0;
 }
 
+static int persist_clear(uint32_t flags, const char *output) {
+	char err[256];
+	if ((flags & MANJU_CLEAR_IMAGE) != 0 &&
+		!manju_config_persist_clear_image(output, err, sizeof(err))) {
+		fprintf(stderr,
+			"manju: applied but could not save config: %s\n", err);
+		return 1;
+	}
+	if ((flags & MANJU_CLEAR_FIT) != 0 &&
+		!manju_config_persist_clear_fit(output, err, sizeof(err))) {
+		fprintf(stderr,
+			"manju: applied but could not save config: %s\n", err);
+		return 1;
+	}
+	return 0;
+}
+
+static int cmd_clear(int argc, char **argv) {
+	const char *output = NULL;
+	bool persist = false;
+	uint32_t flags = 0;
+
+	for (int i = 2; i < argc; i++) {
+		const char *a = argv[i];
+		if (strcmp(a, "-p") == 0 || strcmp(a, "--persist") == 0) {
+			persist = true;
+		} else if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
+			if (i + 1 >= argc) {
+				fprintf(stderr,
+					"manju: --output needs a name\n");
+				return 2;
+			}
+			output = argv[++i];
+		} else if (strncmp(a, "--output=", 9) == 0) {
+			output = a + 9;
+		} else if (strcmp(a, "--image") == 0) {
+			flags |= MANJU_CLEAR_IMAGE;
+		} else if (strcmp(a, "--fit") == 0) {
+			flags |= MANJU_CLEAR_FIT;
+		} else {
+			fprintf(stderr, "manju: unknown clear option '%s'\n",
+				a);
+			return 2;
+		}
+	}
+
+	if (output != NULL && !valid_output_arg(output)) {
+		fprintf(stderr, "manju: invalid --output name\n");
+		return 2;
+	}
+	if (flags == 0) {
+		flags = MANJU_CLEAR_IMAGE;
+	}
+
+	uint8_t payload[8 + 63];
+	manju_put_u32(payload, flags);
+	uint32_t payload_len = 8;
+	if (output == NULL) {
+		manju_put_u32(payload + 4, 0);
+	} else {
+		size_t output_len = strlen(output);
+		manju_put_u32(payload + 4, (uint32_t)output_len);
+		// NOLINTNEXTLINE(bugprone-not-null-terminated-result)
+		memcpy(payload + 8, output, output_len);
+		payload_len = (uint32_t)(8 + output_len);
+	}
+
+	int rc = manju_client_request(MANJU_CMD_CLEAR, payload, payload_len);
+	if (rc != 0 || !persist) {
+		return rc;
+	}
+	return persist_clear(flags, output);
+}
+
 static void usage(FILE *out) {
 	fputs("usage: manju <command> [args]\n"
 	      "\n"
@@ -253,12 +327,19 @@ static void usage(FILE *out) {
 	      "  set fit <mode> --output <name>\n"
 	      "                             set fit on one output\n"
 	      "  set color <#rrggbb>        set the background color\n"
+	      "  clear                      clear images to the background "
+	      "color\n"
+	      "  clear --output <name>      clear one output image override\n"
+	      "  clear --fit [--output <name>]\n"
+	      "                             clear fit state\n"
 	      "  query                      print daemon and output status\n"
 	      "  stop                       stop the running daemon\n"
 	      "\n"
-	      "img/set options:\n"
+	      "img/set/clear options:\n"
 	      "  -o, --output <name>  target a single output\n"
 	      "  -p, --persist        also save the change to the config\n"
+	      "  --image              clear image state (clear only)\n"
+	      "  --fit                clear fit state (clear only)\n"
 	      "\n"
 	      "options:\n"
 	      "  -h, --help     show this help and exit\n"
@@ -294,6 +375,10 @@ int main(int argc, char **argv) {
 
 	if (strcmp(cmd, "set") == 0) {
 		return cmd_set(argc, argv);
+	}
+
+	if (strcmp(cmd, "clear") == 0) {
+		return cmd_clear(argc, argv);
 	}
 
 	if (strcmp(cmd, "prepare") == 0) {

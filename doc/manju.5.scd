@@ -15,6 +15,8 @@ and line number, and the daemon continues with defaults rather than failing to
 start. Runtime *manju img* and *manju set* changes are not written back to
 this file unless *--persist* is given (see *manju*(1)), which rewrites only the
 affected setting and preserves other keys, comments, and sections.
+Runtime *manju clear --persist* removes the matching saved keys while preserving
+the rest of the file.
 
 The format is a small subset of TOML: top-level _key = "value"_ entries with
 double-quoted string values, _#_ comments (including trailing comments), and

@@ -13,6 +13,7 @@
 #include "config/config.h"
 #include "ipc/protocol.h"
 #include "ipc/server.h"
+#include "query/json.h"
 #include "wayland/output.h"
 #include "wayland/registry.h"
 #include "wayland/surface.h"
@@ -26,6 +27,7 @@ struct assignment {
 };
 
 #define MAX_ASSIGNMENTS 16
+#define MAX_QUERY_OUTPUTS 64
 
 struct daemon {
 	struct wl_display *display;
@@ -435,6 +437,54 @@ static uint8_t handle_query(
 	return SWEETBG_STATUS_OK;
 }
 
+static uint8_t handle_query_json(
+	struct daemon *daemon, char *message, size_t message_size) {
+	struct sweetbg_query_json_output outputs[MAX_QUERY_OUTPUTS];
+	size_t output_count = 0;
+
+	struct sweetbg_output *output;
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		if (output_count >= MAX_QUERY_OUTPUTS) {
+			snprintf(message, message_size, "too many outputs");
+			return SWEETBG_STATUS_ERR_BAD_REQUEST;
+		}
+
+		const struct assignment *assigned =
+			const_assignment_for(daemon, output->name);
+		const bool has_image = assigned != NULL && assigned->has_image;
+		const bool has_fit = assigned != NULL && assigned->has_fit;
+		const bool blank = has_image && assigned->path[0] == '\0';
+		const char *path =
+			blank ? NULL : effective_path(daemon, output);
+
+		outputs[output_count++] = (struct sweetbg_query_json_output){
+			.name = output->name,
+			.width = output->pixel_width,
+			.height = output->pixel_height,
+			.scale = output->scale,
+			.configured = output->surface.configured,
+			.image = path,
+			.image_override = has_image,
+			.blank = blank,
+			.fit = sweetbg_fit_name(effective_fit(daemon, output)),
+			.fit_override = has_fit,
+		};
+	}
+
+	const struct sweetbg_query_json_state state = {
+		.default_image = daemon->default_path,
+		.color = daemon->color,
+		.default_fit = sweetbg_fit_name(daemon->fit),
+		.outputs = outputs,
+		.output_count = output_count,
+	};
+	if (!sweetbg_query_json_write(&state, message, message_size)) {
+		snprintf(message, message_size, "query response too large");
+		return SWEETBG_STATUS_ERR_BAD_REQUEST;
+	}
+	return SWEETBG_STATUS_OK;
+}
+
 static uint8_t handle_query_outputs(
 	struct daemon *daemon, char *message, size_t message_size) {
 	size_t off = 0;
@@ -763,6 +813,8 @@ static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 		return SWEETBG_STATUS_OK;
 	case SWEETBG_CMD_QUERY:
 		return handle_query(daemon, message, message_size);
+	case SWEETBG_CMD_QUERY_JSON:
+		return handle_query_json(daemon, message, message_size);
 	case SWEETBG_CMD_QUERY_OUTPUTS:
 		return handle_query_outputs(daemon, message, message_size);
 	case SWEETBG_CMD_IMG_PREPARED:

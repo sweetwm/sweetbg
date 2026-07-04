@@ -57,6 +57,7 @@ sweetbg set color "#1e1e2e" --persist
 
 sweetbg clear
 sweetbg query
+sweetbg query --json
 sweetbg doctor
 sweetbg stop
 ```

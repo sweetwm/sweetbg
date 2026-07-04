@@ -66,6 +66,7 @@ executable(
 	'src/wayland/shm.c',
 	'src/ipc/server.c',
 	'src/config/config.c',
+	'src/query/json.c',
 	include_directories: sweetbg_inc,
 	link_with: ipc_proto,
 	dependencies: [wayland_client, sweetbg_protocols_dep],

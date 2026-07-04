@@ -344,6 +344,21 @@ static int cmd_clear(int argc, char **argv) {
 	return persist_clear(flags, output);
 }
 
+static int cmd_query(int argc, char **argv) {
+	bool json = false;
+	for (int i = 2; i < argc; i++) {
+		if (strcmp(argv[i], "--json") == 0) {
+			json = true;
+		} else {
+			fprintf(stderr, "sweetbg: unknown query option '%s'\n",
+				argv[i]);
+			return 2;
+		}
+	}
+	return sweetbg_client_request(
+		json ? SWEETBG_CMD_QUERY_JSON : SWEETBG_CMD_QUERY, NULL, 0);
+}
+
 static void usage(FILE *out) {
 	fputs("usage: sweetbg <command> [args]\n"
 	      "\n"
@@ -364,6 +379,7 @@ static void usage(FILE *out) {
 	      "  clear --fit [--output <name>]\n"
 	      "                             clear fit state\n"
 	      "  query                      print daemon and output status\n"
+	      "  query --json               print daemon status as JSON\n"
 	      "  doctor                     check setup and daemon "
 	      "reachability\n"
 	      "  stop                       stop the running daemon\n"
@@ -425,7 +441,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (strcmp(cmd, "query") == 0) {
-		return sweetbg_client_request(SWEETBG_CMD_QUERY, NULL, 0);
+		return cmd_query(argc, argv);
 	}
 
 	if (strcmp(cmd, "doctor") == 0) {

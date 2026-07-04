@@ -73,6 +73,12 @@ parses arguments, sends one request, prints the response, and returns.
 	the default fit mode, followed by one line per output with its name,
 	resolution, scale, and any per-output override.
 
+*query* *--json*
+	Print the same daemon state as compact JSON for scripts. The object has a
+	_default_ object with _image_, _color_, and _fit_, plus an _outputs_ array.
+	Each output contains _name_, _width_, _height_, _scale_, _configured_,
+	_image_, _imageOverride_, _blank_, _fit_, and _fitOverride_.
+
 *doctor*
 	Check the Sweetbg setup and print a compact diagnostic report. It verifies
 	the session environment, config file syntax and configured image paths,

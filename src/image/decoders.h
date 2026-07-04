@@ -1,5 +1,5 @@
-#ifndef MANJU_IMAGE_DECODERS_H
-#define MANJU_IMAGE_DECODERS_H
+#ifndef SWEETBG_IMAGE_DECODERS_H
+#define SWEETBG_IMAGE_DECODERS_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -8,12 +8,12 @@
 
 #include "image/image.h"
 
-bool manju_image_dimensions_ok(uint32_t width, uint32_t height);
-bool manju_decode_png(
-	FILE *fp, struct manju_image *img, char *err, size_t err_size);
-bool manju_decode_jpeg(
-	FILE *fp, struct manju_image *img, char *err, size_t err_size);
-bool manju_decode_webp(
-	FILE *fp, struct manju_image *img, char *err, size_t err_size);
+bool sweetbg_image_dimensions_ok(uint32_t width, uint32_t height);
+bool sweetbg_decode_png(
+	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size);
+bool sweetbg_decode_jpeg(
+	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size);
+bool sweetbg_decode_webp(
+	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size);
 
 #endif

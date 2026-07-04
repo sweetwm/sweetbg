@@ -6,8 +6,8 @@
 #define BYTES_PER_PIXEL 4
 #define MAX_WEBP_FILE (64UL * 1024 * 1024)
 
-bool manju_decode_webp(
-	FILE *fp, struct manju_image *img, char *err, size_t err_size) {
+bool sweetbg_decode_webp(
+	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size) {
 	// libwebp decodes from a memory buffer, so read the whole file in
 	if (fseek(fp, 0, SEEK_END) != 0) {
 		snprintf(err, err_size, "webp: cannot read");
@@ -41,7 +41,7 @@ bool manju_decode_webp(
 		snprintf(err, err_size, "webp: not a valid webp");
 		return false;
 	}
-	if (!manju_image_dimensions_ok((uint32_t)width, (uint32_t)height)) {
+	if (!sweetbg_image_dimensions_ok((uint32_t)width, (uint32_t)height)) {
 		free(data);
 		snprintf(err, err_size, "webp: image too large");
 		return false;

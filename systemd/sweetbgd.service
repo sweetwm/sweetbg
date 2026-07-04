@@ -1,13 +1,13 @@
 [Unit]
-Description=Manju Wayland wallpaper daemon
-Documentation=man:manjud(1)
+Description=Sweetbg Wayland wallpaper daemon
+Documentation=man:sweetbgd(1)
 PartOf=graphical-session.target
 After=graphical-session.target
 Requisite=graphical-session.target
 
 [Service]
 Type=exec
-ExecStart=manjud
+ExecStart=sweetbgd
 Restart=on-failure
 Slice=session.slice
 

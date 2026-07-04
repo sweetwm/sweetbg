@@ -1,7 +1,7 @@
 test_ipc_protocol = executable(
 	'test-ipc-protocol',
 	'test_ipc_protocol.c',
-	include_directories: manju_inc,
+	include_directories: sweetbg_inc,
 	link_with: ipc_proto,
 )
 
@@ -11,7 +11,7 @@ test_image_fit = executable(
 	'test-image-fit',
 	'test_image_fit.c',
 	'../src/image/fit.c',
-	include_directories: manju_inc,
+	include_directories: sweetbg_inc,
 )
 
 test('image cover fit', test_image_fit)
@@ -20,7 +20,7 @@ test_config = executable(
 	'test-config',
 	'test_config.c',
 	'../src/config/config.c',
-	include_directories: manju_inc,
+	include_directories: sweetbg_inc,
 )
 
 test('config parser', test_config)
@@ -30,7 +30,7 @@ test_config_write = executable(
 	'test_config_write.c',
 	'../src/config/config_write.c',
 	'../src/config/config.c',
-	include_directories: manju_inc,
+	include_directories: sweetbg_inc,
 )
 
 test('config writer', test_config_write)

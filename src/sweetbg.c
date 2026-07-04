@@ -19,22 +19,23 @@ static bool valid_output_arg(const char *output) {
 static int cmd_img(const char *arg, const char *output, bool persist) {
 	char resolved[PATH_MAX];
 	if (realpath(arg, resolved) == NULL) {
-		fprintf(stderr, "manju: cannot use '%s': %s\n", arg,
+		fprintf(stderr, "sweetbg: cannot use '%s': %s\n", arg,
 			strerror(errno));
 		return 1;
 	}
 	if (output != NULL && !valid_output_arg(output)) {
-		fprintf(stderr, "manju: invalid --output name\n");
+		fprintf(stderr, "sweetbg: invalid --output name\n");
 		return 2;
 	}
-	int rc = manju_client_set_image(resolved, output);
+	int rc = sweetbg_client_set_image(resolved, output);
 	if (rc != 0 || !persist) {
 		return rc;
 	}
 	char err[256];
-	if (!manju_config_persist_image(output, resolved, err, sizeof(err))) {
+	if (!sweetbg_config_persist_image(output, resolved, err, sizeof(err))) {
 		fprintf(stderr,
-			"manju: applied but could not save config: %s\n", err);
+			"sweetbg: applied but could not save config: %s\n",
+			err);
 		return 1;
 	}
 	return 0;
@@ -74,7 +75,7 @@ static int run_img(int argc, char **argv) {
 		if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
 			if (i + 1 >= argc) {
 				fprintf(stderr,
-					"manju: --output needs a name\n");
+					"sweetbg: --output needs a name\n");
 				return 2;
 			}
 			flag_output = argv[++i];
@@ -85,28 +86,30 @@ static int run_img(int argc, char **argv) {
 			continue;
 		}
 		if (a[0] == '-' && a[1] != '\0') {
-			fprintf(stderr, "manju: unknown img option '%s'\n", a);
+			fprintf(stderr, "sweetbg: unknown img option '%s'\n",
+				a);
 			return 2;
 		}
 
 		struct img_override token;
 		if (is_override_token(a, &token)) {
 			if (override_count >= MAX_IMG_OVERRIDES) {
-				fprintf(stderr, "manju: too many outputs\n");
+				fprintf(stderr, "sweetbg: too many outputs\n");
 				return 2;
 			}
 			overrides[override_count++] = token;
 		} else if (default_path == NULL) {
 			default_path = a;
 		} else {
-			fprintf(stderr, "manju: img takes one default path\n");
+			fprintf(stderr,
+				"sweetbg: img takes one default path\n");
 			return 2;
 		}
 	}
 
 	if (flag_output != NULL) {
 		if (override_count > 0 || default_path == NULL) {
-			fprintf(stderr, "manju: use either '--output <name>' "
+			fprintf(stderr, "sweetbg: use either '--output <name>' "
 					"with one path or <name>=<path> "
 					"arguments\n");
 			return 2;
@@ -115,8 +118,9 @@ static int run_img(int argc, char **argv) {
 	}
 
 	if (default_path == NULL && override_count == 0) {
-		fprintf(stderr, "usage: manju img <path> | <name>=<path>... | "
-				"<path> --output <name>\n");
+		fprintf(stderr,
+			"usage: sweetbg img <path> | <name>=<path>... | "
+			"<path> --output <name>\n");
 		return 2;
 	}
 
@@ -127,7 +131,7 @@ static int run_img(int argc, char **argv) {
 	for (int i = 0; i < override_count; i++) {
 		char name[64];
 		if (overrides[i].name_len >= sizeof(name)) {
-			fprintf(stderr, "manju: invalid output name\n");
+			fprintf(stderr, "sweetbg: invalid output name\n");
 			rc = 2;
 			continue;
 		}
@@ -150,7 +154,7 @@ static int cmd_set(int argc, char **argv) {
 		} else if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
 			if (i + 1 >= argc) {
 				fprintf(stderr,
-					"manju: --output needs a name\n");
+					"sweetbg: --output needs a name\n");
 				return 2;
 			}
 			output = argv[++i];
@@ -161,18 +165,18 @@ static int cmd_set(int argc, char **argv) {
 		} else if (value == NULL) {
 			value = a;
 		} else {
-			fprintf(stderr, "manju: set takes <field> <value>\n");
+			fprintf(stderr, "sweetbg: set takes <field> <value>\n");
 			return 2;
 		}
 	}
 	if (field == NULL || value == NULL) {
-		fprintf(stderr, "usage: manju set fit <mode> | "
+		fprintf(stderr, "usage: sweetbg set fit <mode> | "
 				"color <#rrggbb> [--output <name>] "
 				"[--persist]\n");
 		return 2;
 	}
 	if (output != NULL && !valid_output_arg(output)) {
-		fprintf(stderr, "manju: invalid --output name\n");
+		fprintf(stderr, "sweetbg: invalid --output name\n");
 		return 2;
 	}
 
@@ -181,61 +185,62 @@ static int cmd_set(int argc, char **argv) {
 	char canon[16];
 	const char *persist_value;
 	if (strcmp(field, "fit") == 0) {
-		enum manju_fit fit;
-		if (!manju_fit_from_name(value, &fit)) {
-			fprintf(stderr, "manju: fit must be cover, contain, "
+		enum sweetbg_fit fit;
+		if (!sweetbg_fit_from_name(value, &fit)) {
+			fprintf(stderr, "sweetbg: fit must be cover, contain, "
 					"center, or tile\n");
 			return 2;
 		}
-		set_field = MANJU_SET_FIT;
+		set_field = SWEETBG_SET_FIT;
 		set_value = (uint32_t)fit;
-		persist_value = manju_fit_name(fit);
+		persist_value = sweetbg_fit_name(fit);
 	} else if (strcmp(field, "color") == 0) {
 		if (output != NULL) {
-			fprintf(stderr, "manju: color cannot be scoped to an "
+			fprintf(stderr, "sweetbg: color cannot be scoped to an "
 					"output\n");
 			return 2;
 		}
 		uint32_t color;
-		if (!manju_config_parse_color(value, &color)) {
-			fprintf(stderr, "manju: color must be \"#rrggbb\"\n");
+		if (!sweetbg_config_parse_color(value, &color)) {
+			fprintf(stderr, "sweetbg: color must be \"#rrggbb\"\n");
 			return 2;
 		}
-		set_field = MANJU_SET_COLOR;
+		set_field = SWEETBG_SET_COLOR;
 		set_value = color;
 		snprintf(canon, sizeof(canon), "#%06x", color & 0xffffffu);
 		persist_value = canon;
 	} else {
 		fprintf(stderr,
-			"manju: unknown set field '%s' (use fit or color)\n",
+			"sweetbg: unknown set field '%s' (use fit or color)\n",
 			field);
 		return 2;
 	}
 
 	uint8_t payload[12 + 63];
-	manju_put_u32(payload, set_field);
-	manju_put_u32(payload + 4, set_value);
+	sweetbg_put_u32(payload, set_field);
+	sweetbg_put_u32(payload + 4, set_value);
 	uint32_t payload_len = 8;
 	if (output != NULL) {
 		size_t output_len = strlen(output);
-		manju_put_u32(payload + 8, (uint32_t)output_len);
+		sweetbg_put_u32(payload + 8, (uint32_t)output_len);
 		// NOLINTNEXTLINE(bugprone-not-null-terminated-result)
 		memcpy(payload + 12, output, output_len);
 		payload_len = (uint32_t)(12 + output_len);
 	}
-	int rc = manju_client_request(MANJU_CMD_SET, payload, payload_len);
+	int rc = sweetbg_client_request(SWEETBG_CMD_SET, payload, payload_len);
 	if (rc != 0 || !persist) {
 		return rc;
 	}
 	char err[256];
 	bool saved = output == NULL
-			     ? manju_config_persist_setting(
+			     ? sweetbg_config_persist_setting(
 				       field, persist_value, err, sizeof(err))
-			     : manju_config_persist_output_setting(output,
+			     : sweetbg_config_persist_output_setting(output,
 				       field, persist_value, err, sizeof(err));
 	if (!saved) {
 		fprintf(stderr,
-			"manju: applied but could not save config: %s\n", err);
+			"sweetbg: applied but could not save config: %s\n",
+			err);
 		return 1;
 	}
 	return 0;
@@ -243,22 +248,26 @@ static int cmd_set(int argc, char **argv) {
 
 static int persist_clear(uint32_t flags, const char *output) {
 	char err[256];
-	if ((flags & MANJU_CLEAR_BLANK) != 0 &&
-		!manju_config_persist_blank_output(output, err, sizeof(err))) {
+	if ((flags & SWEETBG_CLEAR_BLANK) != 0 &&
+		!sweetbg_config_persist_blank_output(
+			output, err, sizeof(err))) {
 		fprintf(stderr,
-			"manju: applied but could not save config: %s\n", err);
+			"sweetbg: applied but could not save config: %s\n",
+			err);
 		return 1;
 	}
-	if ((flags & MANJU_CLEAR_IMAGE) != 0 &&
-		!manju_config_persist_clear_image(output, err, sizeof(err))) {
+	if ((flags & SWEETBG_CLEAR_IMAGE) != 0 &&
+		!sweetbg_config_persist_clear_image(output, err, sizeof(err))) {
 		fprintf(stderr,
-			"manju: applied but could not save config: %s\n", err);
+			"sweetbg: applied but could not save config: %s\n",
+			err);
 		return 1;
 	}
-	if ((flags & MANJU_CLEAR_FIT) != 0 &&
-		!manju_config_persist_clear_fit(output, err, sizeof(err))) {
+	if ((flags & SWEETBG_CLEAR_FIT) != 0 &&
+		!sweetbg_config_persist_clear_fit(output, err, sizeof(err))) {
 		fprintf(stderr,
-			"manju: applied but could not save config: %s\n", err);
+			"sweetbg: applied but could not save config: %s\n",
+			err);
 		return 1;
 	}
 	return 0;
@@ -276,57 +285,58 @@ static int cmd_clear(int argc, char **argv) {
 		} else if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
 			if (i + 1 >= argc) {
 				fprintf(stderr,
-					"manju: --output needs a name\n");
+					"sweetbg: --output needs a name\n");
 				return 2;
 			}
 			output = argv[++i];
 		} else if (strncmp(a, "--output=", 9) == 0) {
 			output = a + 9;
 		} else if (strcmp(a, "--image") == 0) {
-			flags |= MANJU_CLEAR_IMAGE;
+			flags |= SWEETBG_CLEAR_IMAGE;
 		} else if (strcmp(a, "--fit") == 0) {
-			flags |= MANJU_CLEAR_FIT;
+			flags |= SWEETBG_CLEAR_FIT;
 		} else if (strcmp(a, "--blank") == 0) {
-			flags |= MANJU_CLEAR_BLANK;
+			flags |= SWEETBG_CLEAR_BLANK;
 		} else {
-			fprintf(stderr, "manju: unknown clear option '%s'\n",
+			fprintf(stderr, "sweetbg: unknown clear option '%s'\n",
 				a);
 			return 2;
 		}
 	}
 
 	if (output != NULL && !valid_output_arg(output)) {
-		fprintf(stderr, "manju: invalid --output name\n");
+		fprintf(stderr, "sweetbg: invalid --output name\n");
 		return 2;
 	}
-	if ((flags & MANJU_CLEAR_BLANK) != 0 && output == NULL) {
-		fprintf(stderr, "manju: --blank requires --output <name>\n");
+	if ((flags & SWEETBG_CLEAR_BLANK) != 0 && output == NULL) {
+		fprintf(stderr, "sweetbg: --blank requires --output <name>\n");
 		return 2;
 	}
-	if ((flags & MANJU_CLEAR_BLANK) != 0 &&
-		(flags & MANJU_CLEAR_IMAGE) != 0) {
+	if ((flags & SWEETBG_CLEAR_BLANK) != 0 &&
+		(flags & SWEETBG_CLEAR_IMAGE) != 0) {
 		fprintf(stderr,
-			"manju: use either --blank or --image, not both\n");
+			"sweetbg: use either --blank or --image, not both\n");
 		return 2;
 	}
 	if (flags == 0) {
-		flags = MANJU_CLEAR_IMAGE;
+		flags = SWEETBG_CLEAR_IMAGE;
 	}
 
 	uint8_t payload[8 + 63];
-	manju_put_u32(payload, flags);
+	sweetbg_put_u32(payload, flags);
 	uint32_t payload_len = 8;
 	if (output == NULL) {
-		manju_put_u32(payload + 4, 0);
+		sweetbg_put_u32(payload + 4, 0);
 	} else {
 		size_t output_len = strlen(output);
-		manju_put_u32(payload + 4, (uint32_t)output_len);
+		sweetbg_put_u32(payload + 4, (uint32_t)output_len);
 		// NOLINTNEXTLINE(bugprone-not-null-terminated-result)
 		memcpy(payload + 8, output, output_len);
 		payload_len = (uint32_t)(8 + output_len);
 	}
 
-	int rc = manju_client_request(MANJU_CMD_CLEAR, payload, payload_len);
+	int rc =
+		sweetbg_client_request(SWEETBG_CMD_CLEAR, payload, payload_len);
 	if (rc != 0 || !persist) {
 		return rc;
 	}
@@ -334,7 +344,7 @@ static int cmd_clear(int argc, char **argv) {
 }
 
 static void usage(FILE *out) {
-	fputs("usage: manju <command> [args]\n"
+	fputs("usage: sweetbg <command> [args]\n"
 	      "\n"
 	      "commands:\n"
 	      "  img <path>                 set the wallpaper on all outputs\n"
@@ -382,12 +392,12 @@ int main(int argc, char **argv) {
 	}
 
 	if (strcmp(cmd, "-V") == 0 || strcmp(cmd, "--version") == 0) {
-		printf("manju %s\n", MANJU_VERSION);
+		printf("sweetbg %s\n", SWEETBG_VERSION);
 		return 0;
 	}
 
 	if (strcmp(cmd, "stop") == 0) {
-		return manju_client_request(MANJU_CMD_STOP, NULL, 0);
+		return sweetbg_client_request(SWEETBG_CMD_STOP, NULL, 0);
 	}
 
 	if (strcmp(cmd, "img") == 0) {
@@ -405,17 +415,17 @@ int main(int argc, char **argv) {
 	if (strcmp(cmd, "prepare") == 0) {
 		if (argc < 4) {
 			fprintf(stderr,
-				"usage: manju prepare <output> <path>\n");
+				"usage: sweetbg prepare <output> <path>\n");
 			return 2;
 		}
-		return manju_client_prepare_output(argv[2], argv[3]);
+		return sweetbg_client_prepare_output(argv[2], argv[3]);
 	}
 
 	if (strcmp(cmd, "query") == 0) {
-		return manju_client_request(MANJU_CMD_QUERY, NULL, 0);
+		return sweetbg_client_request(SWEETBG_CMD_QUERY, NULL, 0);
 	}
 
-	fprintf(stderr, "manju: unknown command '%s'\n", cmd);
+	fprintf(stderr, "sweetbg: unknown command '%s'\n", cmd);
 	usage(stderr);
 	return 2;
 }

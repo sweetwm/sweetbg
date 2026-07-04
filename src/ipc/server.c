@@ -48,33 +48,33 @@ static bool clear_existing_socket(const struct sockaddr_un *addr) {
 	case SOCKET_STALE:
 		if (unlink(addr->sun_path) < 0) {
 			fprintf(stderr,
-				"manjud: cannot remove stale socket %s: %s\n",
+				"sweetbgd: cannot remove stale socket %s: %s\n",
 				addr->sun_path, strerror(errno));
 			return false;
 		}
 		return true;
 	case SOCKET_LIVE:
-		fprintf(stderr, "manjud: a daemon is already running at %s\n",
+		fprintf(stderr, "sweetbgd: a daemon is already running at %s\n",
 			addr->sun_path);
 		return false;
 	case SOCKET_ERROR:
 	default:
-		fprintf(stderr, "manjud: cannot check socket %s: %s\n",
+		fprintf(stderr, "sweetbgd: cannot check socket %s: %s\n",
 			addr->sun_path, strerror(errno));
 		return false;
 	}
 }
 
-bool manju_ipc_server_init(struct manju_ipc_server *server) {
+bool sweetbg_ipc_server_init(struct sweetbg_ipc_server *server) {
 	server->fd = -1;
 	server->path[0] = '\0';
 
 	struct sockaddr_un addr;
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	if (!manju_ipc_socket_path(addr.sun_path, sizeof(addr.sun_path))) {
+	if (!sweetbg_ipc_socket_path(addr.sun_path, sizeof(addr.sun_path))) {
 		fprintf(stderr,
-			"manjud: XDG_RUNTIME_DIR is unset or the socket "
+			"sweetbgd: XDG_RUNTIME_DIR is unset or the socket "
 			"path is too long\n");
 		return false;
 	}
@@ -85,20 +85,20 @@ bool manju_ipc_server_init(struct manju_ipc_server *server) {
 
 	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (fd < 0) {
-		fprintf(stderr, "manjud: cannot create socket: %s\n",
+		fprintf(stderr, "sweetbgd: cannot create socket: %s\n",
 			strerror(errno));
 		return false;
 	}
 
 	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		fprintf(stderr, "manjud: cannot bind %s: %s\n", addr.sun_path,
+		fprintf(stderr, "sweetbgd: cannot bind %s: %s\n", addr.sun_path,
 			strerror(errno));
 		close(fd);
 		return false;
 	}
 
 	if (chmod(addr.sun_path, S_IRUSR | S_IWUSR) < 0 || listen(fd, 4) < 0) {
-		fprintf(stderr, "manjud: cannot listen on %s: %s\n",
+		fprintf(stderr, "sweetbgd: cannot listen on %s: %s\n",
 			addr.sun_path, strerror(errno));
 		close(fd);
 		unlink(addr.sun_path);
@@ -110,8 +110,8 @@ bool manju_ipc_server_init(struct manju_ipc_server *server) {
 	return true;
 }
 
-void manju_ipc_server_handle(struct manju_ipc_server *server,
-	manju_ipc_dispatch_fn dispatch, void *data, bool *stop) {
+void sweetbg_ipc_server_handle(struct sweetbg_ipc_server *server,
+	sweetbg_ipc_dispatch_fn dispatch, void *data, bool *stop) {
 	*stop = false;
 
 	int client = accept4(server->fd, NULL, NULL, SOCK_CLOEXEC);
@@ -126,20 +126,20 @@ void manju_ipc_server_handle(struct manju_ipc_server *server,
 	setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
 	uint8_t type;
-	uint8_t payload[MANJU_IPC_MAX_PAYLOAD];
+	uint8_t payload[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
 	int fd = -1;
-	if (manju_ipc_recv_frame_fd(
+	if (sweetbg_ipc_recv_frame_fd(
 		    client, &type, payload, &len, sizeof(payload), &fd)) {
 		// Sized for a multi-output query response, capped by the frame
-		char message[MANJU_IPC_MAX_PAYLOAD] = {0};
+		char message[SWEETBG_IPC_MAX_PAYLOAD] = {0};
 		uint8_t status = dispatch(data, type, payload, len, fd, message,
 			sizeof(message), stop);
-		manju_ipc_send_frame(
+		sweetbg_ipc_send_frame(
 			client, status, message, (uint32_t)strlen(message));
 	} else {
-		manju_ipc_send_frame(
-			client, MANJU_STATUS_ERR_BAD_REQUEST, NULL, 0);
+		sweetbg_ipc_send_frame(
+			client, SWEETBG_STATUS_ERR_BAD_REQUEST, NULL, 0);
 	}
 
 	// Single owner of the received fd: the handler used it during dispatch
@@ -150,7 +150,7 @@ void manju_ipc_server_handle(struct manju_ipc_server *server,
 	close(client);
 }
 
-void manju_ipc_server_finish(struct manju_ipc_server *server) {
+void sweetbg_ipc_server_finish(struct sweetbg_ipc_server *server) {
 	if (server->fd >= 0) {
 		close(server->fd);
 		server->fd = -1;

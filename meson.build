@@ -1,5 +1,5 @@
 project(
-	'manju',
+	'sweetbg',
 	'c',
 	version: '0.1.0',
 	meson_version: '>= 0.60.0',
@@ -11,7 +11,7 @@ project(
 )
 
 add_project_arguments(
-	'-DMANJU_VERSION="' + meson.project_version() + '"',
+	'-DSWEETBG_VERSION="' + meson.project_version() + '"',
 	# Linux-only daemon; enable memfd_create and the POSIX surface
 	'-D_GNU_SOURCE',
 	language: 'c',
@@ -30,18 +30,18 @@ wayland_scanner = find_program(
 
 subdir('protocol')
 
-manju_inc = include_directories('src')
+sweetbg_inc = include_directories('src')
 
 # Framing protocol shared by the client and daemon
 ipc_proto = static_library(
-	'manju-ipc',
+	'sweetbg-ipc',
 	'src/ipc/protocol.c',
-	include_directories: manju_inc,
+	include_directories: sweetbg_inc,
 )
 
 executable(
-	'manju',
-	'src/manju.c',
+	'sweetbg',
+	'src/sweetbg.c',
 	'src/ipc/client.c',
 	'src/image/image.c',
 	'src/image/fit.c',
@@ -50,24 +50,24 @@ executable(
 	'src/image/webp.c',
 	'src/config/config.c',
 	'src/config/config_write.c',
-	include_directories: manju_inc,
+	include_directories: sweetbg_inc,
 	link_with: ipc_proto,
 	dependencies: [libpng, libjpeg, libwebp],
 	install: true,
 )
 
 executable(
-	'manjud',
-	'src/manjud.c',
+	'sweetbgd',
+	'src/sweetbgd.c',
 	'src/wayland/registry.c',
 	'src/wayland/output.c',
 	'src/wayland/surface.c',
 	'src/wayland/shm.c',
 	'src/ipc/server.c',
 	'src/config/config.c',
-	include_directories: manju_inc,
+	include_directories: sweetbg_inc,
 	link_with: ipc_proto,
-	dependencies: [wayland_client, manju_protocols_dep],
+	dependencies: [wayland_client, sweetbg_protocols_dep],
 	install: true,
 )
 

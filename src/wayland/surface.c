@@ -4,13 +4,13 @@
 #include "viewporter-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
-#define BACKGROUND_NAMESPACE "manju"
+#define BACKGROUND_NAMESPACE "sweetbg"
 #define FRACTIONAL_SCALE_DENOM 120
 
 static void handle_configure(void *data,
 	struct zwlr_layer_surface_v1 *layer_surface, uint32_t serial,
 	uint32_t width, uint32_t height) {
-	struct manju_surface *surface = data;
+	struct sweetbg_surface *surface = data;
 	zwlr_layer_surface_v1_ack_configure(layer_surface, serial);
 
 	if (width != surface->width || height != surface->height) {
@@ -23,10 +23,10 @@ static void handle_configure(void *data,
 
 static void handle_closed(
 	void *data, struct zwlr_layer_surface_v1 *layer_surface) {
-	struct manju_surface *surface = data;
+	struct sweetbg_surface *surface = data;
 	(void)layer_surface;
 
-	manju_surface_destroy(surface);
+	sweetbg_surface_destroy(surface);
 }
 
 static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
@@ -36,7 +36,7 @@ static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
 
 static void handle_preferred_scale(
 	void *data, struct wp_fractional_scale_v1 *fractional, uint32_t scale) {
-	struct manju_surface *surface = data;
+	struct sweetbg_surface *surface = data;
 	(void)fractional;
 	if (scale != surface->fractional_scale) {
 		surface->fractional_scale = scale;
@@ -49,7 +49,7 @@ static const struct wp_fractional_scale_v1_listener fractional_scale_listener =
 		.preferred_scale = handle_preferred_scale,
 };
 
-bool manju_surface_create(struct manju_surface *surface,
+bool sweetbg_surface_create(struct sweetbg_surface *surface,
 	struct wl_compositor *compositor,
 	struct zwlr_layer_shell_v1 *layer_shell, struct wl_output *output,
 	struct wp_viewporter *viewporter,
@@ -105,7 +105,7 @@ bool manju_surface_create(struct manju_surface *surface,
 	return true;
 }
 
-void manju_surface_buffer_size(const struct manju_surface *surface,
+void sweetbg_surface_buffer_size(const struct sweetbg_surface *surface,
 	int32_t int_scale, uint32_t *pixel_width, uint32_t *pixel_height) {
 	if (surface->fractional_scale > 0) {
 		*pixel_width =
@@ -127,18 +127,18 @@ void manju_surface_buffer_size(const struct manju_surface *surface,
 	*pixel_height = surface->height * (uint32_t)int_scale;
 }
 
-static bool prepare_buffer(struct manju_surface *surface, struct wl_shm *shm,
+static bool prepare_buffer(struct sweetbg_surface *surface, struct wl_shm *shm,
 	int32_t scale, uint32_t *pixel_width, uint32_t *pixel_height) {
 	if (!surface->configured || surface->wl_surface == NULL) {
 		return false;
 	}
 	uint32_t pw;
 	uint32_t ph;
-	manju_surface_buffer_size(surface, scale, &pw, &ph);
+	sweetbg_surface_buffer_size(surface, scale, &pw, &ph);
 
 	// Release any previous buffer before replacing it
-	manju_buffer_destroy(&surface->buffer);
-	if (!manju_buffer_create(&surface->buffer, shm, pw, ph)) {
+	sweetbg_buffer_destroy(&surface->buffer);
+	if (!sweetbg_buffer_create(&surface->buffer, shm, pw, ph)) {
 		return false;
 	}
 	*pixel_width = pw;
@@ -146,7 +146,7 @@ static bool prepare_buffer(struct manju_surface *surface, struct wl_shm *shm,
 	return true;
 }
 
-static void present(struct manju_surface *surface, int32_t scale,
+static void present(struct sweetbg_surface *surface, int32_t scale,
 	uint32_t pixel_width, uint32_t pixel_height) {
 	if (surface->viewport != NULL && surface->fractional_scale > 0) {
 		wl_surface_set_buffer_scale(surface->wl_surface, 1);
@@ -165,19 +165,19 @@ static void present(struct manju_surface *surface, int32_t scale,
 	surface->needs_repaint = false;
 }
 
-bool manju_surface_paint_color(struct manju_surface *surface,
+bool sweetbg_surface_paint_color(struct sweetbg_surface *surface,
 	struct wl_shm *shm, int32_t scale, uint32_t color) {
 	uint32_t pw;
 	uint32_t ph;
 	if (!prepare_buffer(surface, shm, scale, &pw, &ph)) {
 		return false;
 	}
-	manju_buffer_fill(&surface->buffer, color);
+	sweetbg_buffer_fill(&surface->buffer, color);
 	present(surface, scale, pw, ph);
 	return true;
 }
 
-bool manju_surface_attach_prepared(struct manju_surface *surface,
+bool sweetbg_surface_attach_prepared(struct sweetbg_surface *surface,
 	struct wl_shm *shm, int32_t scale, int fd, uint32_t width,
 	uint32_t height) {
 	if (!surface->configured || surface->wl_surface == NULL) {
@@ -188,15 +188,15 @@ bool manju_surface_attach_prepared(struct manju_surface *surface,
 	}
 
 	// Release any previous buffer before replacing it
-	manju_buffer_destroy(&surface->buffer);
-	if (!manju_buffer_from_fd(&surface->buffer, shm, fd, width, height)) {
+	sweetbg_buffer_destroy(&surface->buffer);
+	if (!sweetbg_buffer_from_fd(&surface->buffer, shm, fd, width, height)) {
 		return false;
 	}
 	present(surface, scale, width, height);
 	return true;
 }
 
-void manju_surface_destroy(struct manju_surface *surface) {
+void sweetbg_surface_destroy(struct sweetbg_surface *surface) {
 	if (surface->fractional != NULL) {
 		wp_fractional_scale_v1_destroy(surface->fractional);
 		surface->fractional = NULL;
@@ -214,6 +214,6 @@ void manju_surface_destroy(struct manju_surface *surface) {
 		surface->wl_surface = NULL;
 	}
 	// Free pixels only after the surface stops referencing the buffer
-	manju_buffer_destroy(&surface->buffer);
+	sweetbg_buffer_destroy(&surface->buffer);
 	surface->configured = false;
 }

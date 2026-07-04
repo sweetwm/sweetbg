@@ -1,5 +1,5 @@
 # Generate Wayland client glue with wayland-scanner. xdg-shell is generated
-# only so wlr-layer-shell's xdg_popup references resolve at link time; manju
+# only so wlr-layer-shell's xdg_popup references resolve at link time; sweetbg
 # does not use xdg-shell directly.
 
 wl_protocol_dir = wayland_protos.get_variable('pkgdatadir')
@@ -32,15 +32,15 @@ foreach xml : protocols
 	)
 endforeach
 
-manju_protocols = static_library(
-	'manju-protocols',
+sweetbg_protocols = static_library(
+	'sweetbg-protocols',
 	protocol_src,
 	protocol_headers,
 	dependencies: wayland_client,
 )
 
-manju_protocols_dep = declare_dependency(
-	link_with: manju_protocols,
+sweetbg_protocols_dep = declare_dependency(
+	link_with: sweetbg_protocols,
 	# listing the headers as sources makes their build dir an include path
 	sources: protocol_headers,
 )

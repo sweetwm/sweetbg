@@ -253,7 +253,7 @@ static bool patch_remove_key(const char *input, const char *section,
 	return true;
 }
 
-bool manju_config_patch_image(const char *input, const char *output_name,
+bool sweetbg_config_patch_image(const char *input, const char *output_name,
 	const char *image_path, char **out, char *err, size_t err_size) {
 	if (output_name == NULL) {
 		return patch_key(
@@ -269,22 +269,22 @@ bool manju_config_patch_image(const char *input, const char *output_name,
 		input, section, "image", image_path, out, err, err_size);
 }
 
-bool manju_config_patch_blank_output(const char *input, const char *output_name,
-	char **out, char *err, size_t err_size) {
+bool sweetbg_config_patch_blank_output(const char *input,
+	const char *output_name, char **out, char *err, size_t err_size) {
 	if (output_name == NULL) {
 		snprintf(err, err_size, "blank requires an output name");
 		return false;
 	}
-	return manju_config_patch_image(
+	return sweetbg_config_patch_image(
 		input, output_name, "", out, err, err_size);
 }
 
-bool manju_config_patch_setting(const char *input, const char *key,
+bool sweetbg_config_patch_setting(const char *input, const char *key,
 	const char *value, char **out, char *err, size_t err_size) {
 	return patch_key(input, NULL, key, value, out, err, err_size);
 }
 
-bool manju_config_patch_output_setting(const char *input,
+bool sweetbg_config_patch_output_setting(const char *input,
 	const char *output_name, const char *key, const char *value, char **out,
 	char *err, size_t err_size) {
 	if (!valid_output_name(output_name)) {
@@ -320,12 +320,12 @@ static bool patch_clear_key(const char *input, const char *output_name,
 	return ok;
 }
 
-bool manju_config_patch_clear_image(const char *input, const char *output_name,
-	char **out, char *err, size_t err_size) {
+bool sweetbg_config_patch_clear_image(const char *input,
+	const char *output_name, char **out, char *err, size_t err_size) {
 	return patch_clear_key(input, output_name, "image", out, err, err_size);
 }
 
-bool manju_config_patch_clear_fit(const char *input, const char *output_name,
+bool sweetbg_config_patch_clear_fit(const char *input, const char *output_name,
 	char **out, char *err, size_t err_size) {
 	return patch_clear_key(input, output_name, "fit", out, err, err_size);
 }
@@ -441,7 +441,7 @@ static bool write_atomic(
 static bool persist_core(const char *section, const char *key,
 	const char *value, char *err, size_t err_size) {
 	char path[PATH_MAX];
-	if (!manju_config_path(path, sizeof(path))) {
+	if (!sweetbg_config_path(path, sizeof(path))) {
 		snprintf(err, err_size,
 			"cannot resolve config path (set XDG_CONFIG_HOME or "
 			"HOME)");
@@ -466,8 +466,8 @@ static bool persist_core(const char *section, const char *key,
 	return ok;
 }
 
-bool manju_config_persist_image(const char *output_name, const char *image_path,
-	char *err, size_t err_size) {
+bool sweetbg_config_persist_image(const char *output_name,
+	const char *image_path, char *err, size_t err_size) {
 	if (output_name == NULL) {
 		return persist_core(NULL, "image", image_path, err, err_size);
 	}
@@ -480,21 +480,21 @@ bool manju_config_persist_image(const char *output_name, const char *image_path,
 	return persist_core(section, "image", image_path, err, err_size);
 }
 
-bool manju_config_persist_blank_output(
+bool sweetbg_config_persist_blank_output(
 	const char *output_name, char *err, size_t err_size) {
 	if (output_name == NULL) {
 		snprintf(err, err_size, "blank requires an output name");
 		return false;
 	}
-	return manju_config_persist_image(output_name, "", err, err_size);
+	return sweetbg_config_persist_image(output_name, "", err, err_size);
 }
 
-bool manju_config_persist_setting(
+bool sweetbg_config_persist_setting(
 	const char *key, const char *value, char *err, size_t err_size) {
 	return persist_core(NULL, key, value, err, err_size);
 }
 
-bool manju_config_persist_output_setting(const char *output_name,
+bool sweetbg_config_persist_output_setting(const char *output_name,
 	const char *key, const char *value, char *err, size_t err_size) {
 	if (!valid_output_name(output_name)) {
 		snprintf(err, err_size, "invalid output name");
@@ -508,7 +508,7 @@ bool manju_config_persist_output_setting(const char *output_name,
 static bool persist_clear_core(
 	const char *output_name, const char *key, char *err, size_t err_size) {
 	char path[PATH_MAX];
-	if (!manju_config_path(path, sizeof(path))) {
+	if (!sweetbg_config_path(path, sizeof(path))) {
 		snprintf(err, err_size,
 			"cannot resolve config path (set XDG_CONFIG_HOME or "
 			"HOME)");
@@ -533,12 +533,12 @@ static bool persist_clear_core(
 	return ok;
 }
 
-bool manju_config_persist_clear_image(
+bool sweetbg_config_persist_clear_image(
 	const char *output_name, char *err, size_t err_size) {
 	return persist_clear_core(output_name, "image", err, err_size);
 }
 
-bool manju_config_persist_clear_fit(
+bool sweetbg_config_persist_clear_fit(
 	const char *output_name, char *err, size_t err_size) {
 	return persist_clear_core(output_name, "fit", err, err_size);
 }

@@ -1,16 +1,16 @@
-manju(1)
+sweetbg(1)
 
 # NAME
 
-manju - command-line client for the manju wallpaper daemon
+sweetbg - command-line client for the sweetbg wallpaper daemon
 
 # SYNOPSIS
 
-*manju* <command> [arguments]
+*sweetbg* <command> [arguments]
 
 # DESCRIPTION
 
-*manju* sends a single request to a running *manjud*(1) daemon and exits.
+*sweetbg* sends a single request to a running *sweetbgd*(1) daemon and exits.
 The daemon owns the Wayland connection and wallpaper state; the client only
 parses arguments, sends one request, prints the response, and returns.
 
@@ -25,14 +25,14 @@ parses arguments, sends one request, prints the response, and returns.
 	Set a different wallpaper per output in one command. Each <name> is an
 	output name from *query* (for example _DP-1_); each is set as that
 	output's override. A bare <path> may be mixed in to also set the
-	default, e.g. _manju img bg.jpg DP-1=left.jpg_.
+	default, e.g. _sweetbg img bg.jpg DP-1=left.jpg_.
 
 *img* <path> *--output* <name>
 	Set <path> on the single output <name> only (equivalent to the
 	_<name>=<path>_ form).
 
 	Pass *--persist* with any *img* form to also save the wallpaper to the
-	config file (see *manju*(5)) so it is restored on the next start.
+	config file (see *sweetbg*(5)) so it is restored on the next start.
 
 *set fit* <mode>
 	Change the fit mode at runtime to _cover_, _contain_, _center_, or
@@ -100,4 +100,4 @@ reports an error, and 2 for invalid command-line usage.
 
 # SEE ALSO
 
-*manjud*(1), *manju*(5)
+*sweetbgd*(1), *sweetbg*(5)

@@ -1,4 +1,4 @@
-// Config parser tests. Feeds strings to manju_config_parse via fmemopen.
+// Config parser tests. Feeds strings to sweetbg_config_parse via fmemopen.
 
 #include "config/config.h"
 
@@ -14,20 +14,20 @@
 		}                                                              \
 	} while (0)
 
-static bool parse(const char *text, struct manju_config *cfg, char *err,
+static bool parse(const char *text, struct sweetbg_config *cfg, char *err,
 	size_t err_size) {
-	manju_config_defaults(cfg);
+	sweetbg_config_defaults(cfg);
 	FILE *fp = fmemopen((void *)text, strlen(text), "r");
 	if (fp == NULL) {
 		return false;
 	}
-	bool ok = manju_config_parse(fp, "test", cfg, err, err_size);
+	bool ok = sweetbg_config_parse(fp, "test", cfg, err, err_size);
 	fclose(fp);
 	return ok;
 }
 
 static int test_full_config(void) {
-	struct manju_config cfg;
+	struct sweetbg_config cfg;
 	char err[256];
 	const char *text = "# a comment\n"
 			   "image = \"/home/me/wall.jpg\"\n"
@@ -36,12 +36,12 @@ static int test_full_config(void) {
 	CHECK(parse(text, &cfg, err, sizeof(err)));
 	CHECK(strcmp(cfg.image, "/home/me/wall.jpg") == 0);
 	CHECK(cfg.color == 0x1e2e3f);
-	CHECK(cfg.fit == MANJU_FIT_COVER);
+	CHECK(cfg.fit == SWEETBG_FIT_COVER);
 	return 0;
 }
 
 static int test_defaults_when_empty(void) {
-	struct manju_config cfg;
+	struct sweetbg_config cfg;
 	char err[256];
 	CHECK(parse("\n  \n# only comments\n", &cfg, err, sizeof(err)));
 	CHECK(cfg.image[0] == '\0');
@@ -50,37 +50,41 @@ static int test_defaults_when_empty(void) {
 }
 
 static int test_fit_modes(void) {
-	struct manju_config cfg;
+	struct sweetbg_config cfg;
 	char err[256];
 	CHECK(parse("fit = \"contain\"\n", &cfg, err, sizeof(err)));
-	CHECK(cfg.fit == MANJU_FIT_CONTAIN);
+	CHECK(cfg.fit == SWEETBG_FIT_CONTAIN);
 	CHECK(parse("fit = \"center\"\n", &cfg, err, sizeof(err)));
-	CHECK(cfg.fit == MANJU_FIT_CENTER);
+	CHECK(cfg.fit == SWEETBG_FIT_CENTER);
 	CHECK(parse("fit = \"tile\"\n", &cfg, err, sizeof(err)));
-	CHECK(cfg.fit == MANJU_FIT_TILE);
+	CHECK(cfg.fit == SWEETBG_FIT_TILE);
 	CHECK(!parse("fit = \"stretch\"\n", &cfg, err, sizeof(err)));
 	CHECK(strstr(err, "fit must be") != NULL);
 	return 0;
 }
 
 static int test_fit_and_color_parsers(void) {
-	enum manju_fit fit;
-	CHECK(manju_fit_from_name("cover", &fit) && fit == MANJU_FIT_COVER);
-	CHECK(manju_fit_from_name("contain", &fit) && fit == MANJU_FIT_CONTAIN);
-	CHECK(manju_fit_from_name("center", &fit) && fit == MANJU_FIT_CENTER);
-	CHECK(manju_fit_from_name("tile", &fit) && fit == MANJU_FIT_TILE);
-	CHECK(!manju_fit_from_name("stretch", &fit));
+	enum sweetbg_fit fit;
+	CHECK(sweetbg_fit_from_name("cover", &fit) && fit == SWEETBG_FIT_COVER);
+	CHECK(sweetbg_fit_from_name("contain", &fit) &&
+		fit == SWEETBG_FIT_CONTAIN);
+	CHECK(sweetbg_fit_from_name("center", &fit) &&
+		fit == SWEETBG_FIT_CENTER);
+	CHECK(sweetbg_fit_from_name("tile", &fit) && fit == SWEETBG_FIT_TILE);
+	CHECK(!sweetbg_fit_from_name("stretch", &fit));
 
 	uint32_t color;
-	CHECK(manju_config_parse_color("#1e2e3f", &color) && color == 0x1e2e3f);
-	CHECK(manju_config_parse_color("#ABCDEF", &color) && color == 0xabcdef);
-	CHECK(!manju_config_parse_color("1e2e3f", &color));
-	CHECK(!manju_config_parse_color("#12345", &color));
+	CHECK(sweetbg_config_parse_color("#1e2e3f", &color) &&
+		color == 0x1e2e3f);
+	CHECK(sweetbg_config_parse_color("#ABCDEF", &color) &&
+		color == 0xabcdef);
+	CHECK(!sweetbg_config_parse_color("1e2e3f", &color));
+	CHECK(!sweetbg_config_parse_color("#12345", &color));
 	return 0;
 }
 
 static int test_unknown_key_fails(void) {
-	struct manju_config cfg;
+	struct sweetbg_config cfg;
 	char err[256];
 	CHECK(!parse("wallpaper = \"x\"\n", &cfg, err, sizeof(err)));
 	CHECK(strstr(err, "unknown key") != NULL);
@@ -88,7 +92,7 @@ static int test_unknown_key_fails(void) {
 }
 
 static int test_bad_color_fails(void) {
-	struct manju_config cfg;
+	struct sweetbg_config cfg;
 	char err[256];
 	CHECK(!parse("color = \"1e1e2e\"\n", &cfg, err, sizeof(err)));
 	CHECK(!parse("color = \"#12345\"\n", &cfg, err, sizeof(err)));
@@ -97,7 +101,7 @@ static int test_bad_color_fails(void) {
 }
 
 static int test_unquoted_and_missing_eq_fail(void) {
-	struct manju_config cfg;
+	struct sweetbg_config cfg;
 	char err[256];
 	CHECK(!parse("image = /home/me/wall.jpg\n", &cfg, err, sizeof(err)));
 	CHECK(!parse("image \"x\"\n", &cfg, err, sizeof(err)));
@@ -105,7 +109,7 @@ static int test_unquoted_and_missing_eq_fail(void) {
 }
 
 static int test_per_output_sections(void) {
-	struct manju_config cfg;
+	struct sweetbg_config cfg;
 	char err[256];
 	const char *text = "image = \"/default.jpg\"\n"
 			   "[output.DP-1]\n"
@@ -120,7 +124,7 @@ static int test_per_output_sections(void) {
 	CHECK(cfg.outputs[0].has_image);
 	CHECK(strcmp(cfg.outputs[0].image, "/left.jpg") == 0);
 	CHECK(cfg.outputs[0].has_fit);
-	CHECK(cfg.outputs[0].fit == MANJU_FIT_CONTAIN);
+	CHECK(cfg.outputs[0].fit == SWEETBG_FIT_CONTAIN);
 	CHECK(strcmp(cfg.outputs[1].name, "HDMI-A-1") == 0);
 	CHECK(cfg.outputs[1].has_image);
 	CHECK(strcmp(cfg.outputs[1].image, "/tv.png") == 0);
@@ -129,7 +133,7 @@ static int test_per_output_sections(void) {
 }
 
 static int test_blank_output_image(void) {
-	struct manju_config cfg;
+	struct sweetbg_config cfg;
 	char err[256];
 	const char *text = "image = \"/default.jpg\"\n"
 			   "[output.DP-1]\n"
@@ -144,7 +148,7 @@ static int test_blank_output_image(void) {
 }
 
 static int test_bad_sections_fail(void) {
-	struct manju_config cfg;
+	struct sweetbg_config cfg;
 	char err[256];
 	CHECK(!parse("[monitor.DP-1]\n", &cfg, err, sizeof(err)));
 	CHECK(!parse("[output.DP-1\n", &cfg, err, sizeof(err)));

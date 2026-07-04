@@ -22,24 +22,24 @@ static int connect_to_daemon(void) {
 	struct sockaddr_un addr;
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	if (!manju_ipc_socket_path(addr.sun_path, sizeof(addr.sun_path))) {
-		fprintf(stderr, "manju: XDG_RUNTIME_DIR is unset or the "
+	if (!sweetbg_ipc_socket_path(addr.sun_path, sizeof(addr.sun_path))) {
+		fprintf(stderr, "sweetbg: XDG_RUNTIME_DIR is unset or the "
 				"socket path is too long\n");
 		return -1;
 	}
 
 	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (fd < 0) {
-		fprintf(stderr, "manju: cannot create socket: %s\n",
+		fprintf(stderr, "sweetbg: cannot create socket: %s\n",
 			strerror(errno));
 		return -1;
 	}
 
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		if (errno == ENOENT || errno == ECONNREFUSED) {
-			fprintf(stderr, "manju: no daemon is running\n");
+			fprintf(stderr, "sweetbg: no daemon is running\n");
 		} else {
-			fprintf(stderr, "manju: cannot connect to %s: %s\n",
+			fprintf(stderr, "sweetbg: cannot connect to %s: %s\n",
 				addr.sun_path, strerror(errno));
 		}
 		close(fd);
@@ -54,31 +54,31 @@ static int connect_to_daemon(void) {
 	return fd;
 }
 
-int manju_client_request(
+int sweetbg_client_request(
 	uint8_t command, const void *payload, uint32_t payload_len) {
 	int fd = connect_to_daemon();
 	if (fd < 0) {
 		return 1;
 	}
 
-	if (!manju_ipc_send_frame(fd, command, payload, payload_len)) {
-		fprintf(stderr, "manju: failed to send request\n");
+	if (!sweetbg_ipc_send_frame(fd, command, payload, payload_len)) {
+		fprintf(stderr, "sweetbg: failed to send request\n");
 		close(fd);
 		return 1;
 	}
 
 	uint8_t type;
-	uint8_t response[MANJU_IPC_MAX_PAYLOAD];
+	uint8_t response[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
-	if (!manju_ipc_recv_frame(
+	if (!sweetbg_ipc_recv_frame(
 		    fd, &type, response, &len, sizeof(response))) {
-		fprintf(stderr, "manju: no valid response from daemon\n");
+		fprintf(stderr, "sweetbg: no valid response from daemon\n");
 		close(fd);
 		return 1;
 	}
 	close(fd);
 
-	bool ok = type == MANJU_STATUS_OK;
+	bool ok = type == SWEETBG_STATUS_OK;
 	if (len > 0) {
 		fprintf(ok ? stdout : stderr, "%.*s\n", (int)len, response);
 	}
@@ -90,38 +90,38 @@ struct output_info {
 	uint32_t width;
 	uint32_t height;
 	int32_t scale;
-	enum manju_fit fit;
+	enum sweetbg_fit fit;
 };
 
-static int query_outputs(struct output_info *list, int max, enum manju_fit *fit,
-	uint32_t *color) {
-	*fit = MANJU_FIT_COVER;
+static int query_outputs(struct output_info *list, int max,
+	enum sweetbg_fit *fit, uint32_t *color) {
+	*fit = SWEETBG_FIT_COVER;
 	*color = 0;
 	int fd = connect_to_daemon();
 	if (fd < 0) {
 		return -1;
 	}
-	if (!manju_ipc_send_frame(fd, MANJU_CMD_QUERY_OUTPUTS, NULL, 0)) {
+	if (!sweetbg_ipc_send_frame(fd, SWEETBG_CMD_QUERY_OUTPUTS, NULL, 0)) {
 		close(fd);
-		fprintf(stderr, "manju: failed to query outputs\n");
+		fprintf(stderr, "sweetbg: failed to query outputs\n");
 		return -1;
 	}
 
 	uint8_t type;
-	uint8_t resp[MANJU_IPC_MAX_PAYLOAD];
+	uint8_t resp[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
-	bool got = manju_ipc_recv_frame(fd, &type, resp, &len, sizeof(resp));
+	bool got = sweetbg_ipc_recv_frame(fd, &type, resp, &len, sizeof(resp));
 	close(fd);
 	if (!got) {
-		fprintf(stderr, "manju: no response from daemon\n");
+		fprintf(stderr, "sweetbg: no response from daemon\n");
 		return -1;
 	}
-	if (type != MANJU_STATUS_OK) {
-		fprintf(stderr, "manju: %.*s\n", (int)len, resp);
+	if (type != SWEETBG_STATUS_OK) {
+		fprintf(stderr, "sweetbg: %.*s\n", (int)len, resp);
 		return -1;
 	}
 
-	char text[MANJU_IPC_MAX_PAYLOAD + 1];
+	char text[SWEETBG_IPC_MAX_PAYLOAD + 1];
 	memcpy(text, resp, len);
 	text[len] = '\0';
 
@@ -136,7 +136,7 @@ static int query_outputs(struct output_info *list, int max, enum manju_fit *fit,
 			const char *fs = strtok_r(NULL, " ", &field_save);
 			const char *cs = strtok_r(NULL, " ", &field_save);
 			if (fs != NULL && cs != NULL) {
-				*fit = (enum manju_fit)strtoul(fs, NULL, 10);
+				*fit = (enum sweetbg_fit)strtoul(fs, NULL, 10);
 				*color = (uint32_t)strtoul(cs, NULL, 10);
 			}
 			continue;
@@ -168,8 +168,8 @@ static int query_outputs(struct output_info *list, int max, enum manju_fit *fit,
 		if (fs != NULL) {
 			char *end_f;
 			unsigned long f = strtoul(fs, &end_f, 10);
-			if (*end_f == '\0' && f <= MANJU_FIT_TILE) {
-				list[count].fit = (enum manju_fit)f;
+			if (*end_f == '\0' && f <= SWEETBG_FIT_TILE) {
+				list[count].fit = (enum sweetbg_fit)f;
 			}
 		}
 		count++;
@@ -177,8 +177,8 @@ static int query_outputs(struct output_info *list, int max, enum manju_fit *fit,
 	return count;
 }
 
-static int prepare_memfd(const struct manju_image *image, uint32_t width,
-	uint32_t height, enum manju_fit fit, uint32_t color) {
+static int prepare_memfd(const struct sweetbg_image *image, uint32_t width,
+	uint32_t height, enum sweetbg_fit fit, uint32_t color) {
 	if (width == 0 || height == 0 || width > MAX_PREPARE_DIMENSION ||
 		height > MAX_PREPARE_DIMENSION) {
 		return -1;
@@ -186,7 +186,7 @@ static int prepare_memfd(const struct manju_image *image, uint32_t width,
 	size_t stride = (size_t)width * 4;
 	size_t size = stride * height;
 
-	int fd = memfd_create("manju-wallpaper", MFD_CLOEXEC);
+	int fd = memfd_create("sweetbg-wallpaper", MFD_CLOEXEC);
 	if (fd < 0) {
 		return -1;
 	}
@@ -200,7 +200,7 @@ static int prepare_memfd(const struct manju_image *image, uint32_t width,
 		close(fd);
 		return -1;
 	}
-	bool ok = manju_image_render(image, fit, width, height, color, data);
+	bool ok = sweetbg_image_render(image, fit, width, height, color, data);
 	munmap(data, size);
 	if (!ok) {
 		close(fd);
@@ -214,21 +214,21 @@ static int send_prepared(const struct output_info *out, uint32_t mode,
 	size_t name_len = strlen(out->name);
 	size_t path_len = strlen(path);
 	size_t total = 20 + name_len + 4 + path_len;
-	if (total > MANJU_IPC_MAX_PAYLOAD) {
-		fprintf(stderr, "manju: image request too long\n");
+	if (total > SWEETBG_IPC_MAX_PAYLOAD) {
+		fprintf(stderr, "sweetbg: image request too long\n");
 		return 1;
 	}
 
-	uint8_t payload[MANJU_IPC_MAX_PAYLOAD];
-	manju_put_u32(payload, mode);
-	manju_put_u32(payload + 4, (uint32_t)out->scale);
-	manju_put_u32(payload + 8, out->width);
-	manju_put_u32(payload + 12, out->height);
-	manju_put_u32(payload + 16, (uint32_t)name_len);
+	uint8_t payload[SWEETBG_IPC_MAX_PAYLOAD];
+	sweetbg_put_u32(payload, mode);
+	sweetbg_put_u32(payload + 4, (uint32_t)out->scale);
+	sweetbg_put_u32(payload + 8, out->width);
+	sweetbg_put_u32(payload + 12, out->height);
+	sweetbg_put_u32(payload + 16, (uint32_t)name_len);
 	// NOLINTNEXTLINE(bugprone-not-null-terminated-result)
 	memcpy(payload + 20, out->name, name_len);
 	size_t off = 20 + name_len;
-	manju_put_u32(payload + off, (uint32_t)path_len);
+	sweetbg_put_u32(payload + off, (uint32_t)path_len);
 	off += 4;
 	// NOLINTNEXTLINE(bugprone-not-null-terminated-result)
 	memcpy(payload + off, path, path_len);
@@ -238,50 +238,51 @@ static int send_prepared(const struct output_info *out, uint32_t mode,
 	if (fd < 0) {
 		return 1;
 	}
-	if (!manju_ipc_send_frame_fd(fd, MANJU_CMD_IMG_PREPARED, payload,
+	if (!sweetbg_ipc_send_frame_fd(fd, SWEETBG_CMD_IMG_PREPARED, payload,
 		    (uint32_t)off, memfd)) {
 		close(fd);
-		fprintf(stderr, "manju: failed to send image\n");
+		fprintf(stderr, "sweetbg: failed to send image\n");
 		return 1;
 	}
 
 	uint8_t type;
-	uint8_t resp[MANJU_IPC_MAX_PAYLOAD];
+	uint8_t resp[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
-	bool got = manju_ipc_recv_frame(fd, &type, resp, &len, sizeof(resp));
+	bool got = sweetbg_ipc_recv_frame(fd, &type, resp, &len, sizeof(resp));
 	close(fd);
 	if (!got) {
-		fprintf(stderr, "manju: no response from daemon\n");
+		fprintf(stderr, "sweetbg: no response from daemon\n");
 		return 1;
 	}
-	if (type != MANJU_STATUS_OK) {
-		fprintf(stderr, "manju: %.*s\n", (int)len, resp);
+	if (type != SWEETBG_STATUS_OK) {
+		fprintf(stderr, "sweetbg: %.*s\n", (int)len, resp);
 		return 1;
 	}
 	return 0;
 }
 
-int manju_client_set_image(const char *path, const char *output) {
+int sweetbg_client_set_image(const char *path, const char *output) {
 	struct output_info outputs[MAX_OUTPUTS];
-	enum manju_fit fit;
+	enum sweetbg_fit fit;
 	uint32_t color;
 	int count = query_outputs(outputs, MAX_OUTPUTS, &fit, &color);
 	if (count < 0) {
 		return 1;
 	}
 	if (count == 0) {
-		fprintf(stderr, "manju: daemon has no configured outputs\n");
+		fprintf(stderr, "sweetbg: daemon has no configured outputs\n");
 		return 1;
 	}
 
-	struct manju_image image;
+	struct sweetbg_image image;
 	char err[128];
-	if (!manju_image_load(&image, path, err, sizeof(err))) {
-		fprintf(stderr, "manju: %s\n", err);
+	if (!sweetbg_image_load(&image, path, err, sizeof(err))) {
+		fprintf(stderr, "sweetbg: %s\n", err);
 		return 1;
 	}
 
-	uint32_t mode = output == NULL ? MANJU_IMG_DEFAULT : MANJU_IMG_OVERRIDE;
+	uint32_t mode =
+		output == NULL ? SWEETBG_IMG_DEFAULT : SWEETBG_IMG_OVERRIDE;
 	int rc = 0;
 	int applied = 0;
 	for (int i = 0; i < count; i++) {
@@ -291,7 +292,7 @@ int manju_client_set_image(const char *path, const char *output) {
 		int memfd = prepare_memfd(&image, outputs[i].width,
 			outputs[i].height, outputs[i].fit, color);
 		if (memfd < 0) {
-			fprintf(stderr, "manju: failed to prepare %s\n",
+			fprintf(stderr, "sweetbg: failed to prepare %s\n",
 				outputs[i].name);
 			rc = 1;
 			continue;
@@ -303,10 +304,10 @@ int manju_client_set_image(const char *path, const char *output) {
 		}
 		close(memfd);
 	}
-	manju_image_free(&image);
+	sweetbg_image_free(&image);
 
 	if (output != NULL && applied == 0 && rc == 0) {
-		fprintf(stderr, "manju: no output named %s\n", output);
+		fprintf(stderr, "sweetbg: no output named %s\n", output);
 		return 1;
 	}
 	if (applied > 0) {
@@ -316,9 +317,9 @@ int manju_client_set_image(const char *path, const char *output) {
 	return rc;
 }
 
-int manju_client_prepare_output(const char *name, const char *path) {
+int sweetbg_client_prepare_output(const char *name, const char *path) {
 	struct output_info outputs[MAX_OUTPUTS];
-	enum manju_fit fit;
+	enum sweetbg_fit fit;
 	uint32_t color;
 	int count = query_outputs(outputs, MAX_OUTPUTS, &fit, &color);
 	if (count < 0) {
@@ -337,10 +338,10 @@ int manju_client_prepare_output(const char *name, const char *path) {
 		return 0;
 	}
 
-	struct manju_image image;
+	struct sweetbg_image image;
 	char err[128];
-	if (!manju_image_load(&image, path, err, sizeof(err))) {
-		fprintf(stderr, "manju: %s\n", err);
+	if (!sweetbg_image_load(&image, path, err, sizeof(err))) {
+		fprintf(stderr, "sweetbg: %s\n", err);
 		return 1;
 	}
 
@@ -348,9 +349,9 @@ int manju_client_prepare_output(const char *name, const char *path) {
 		&image, target->width, target->height, target->fit, color);
 	int rc = 1;
 	if (memfd >= 0) {
-		rc = send_prepared(target, MANJU_IMG_REPAINT, path, memfd);
+		rc = send_prepared(target, SWEETBG_IMG_REPAINT, path, memfd);
 		close(memfd);
 	}
-	manju_image_free(&image);
+	sweetbg_image_free(&image);
 	return rc;
 }

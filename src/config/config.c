@@ -7,39 +7,39 @@
 #define DEFAULT_COLOR 0x1e1e2e
 #define CONFIG_LINE_MAX (PATH_MAX + 64)
 
-const char *manju_fit_name(enum manju_fit fit) {
+const char *sweetbg_fit_name(enum sweetbg_fit fit) {
 	switch (fit) {
-	case MANJU_FIT_CONTAIN:
+	case SWEETBG_FIT_CONTAIN:
 		return "contain";
-	case MANJU_FIT_CENTER:
+	case SWEETBG_FIT_CENTER:
 		return "center";
-	case MANJU_FIT_TILE:
+	case SWEETBG_FIT_TILE:
 		return "tile";
-	case MANJU_FIT_COVER:
+	case SWEETBG_FIT_COVER:
 		break;
 	}
 	return "cover";
 }
 
-bool manju_fit_from_name(const char *name, enum manju_fit *out) {
+bool sweetbg_fit_from_name(const char *name, enum sweetbg_fit *out) {
 	if (strcmp(name, "cover") == 0) {
-		*out = MANJU_FIT_COVER;
+		*out = SWEETBG_FIT_COVER;
 	} else if (strcmp(name, "contain") == 0) {
-		*out = MANJU_FIT_CONTAIN;
+		*out = SWEETBG_FIT_CONTAIN;
 	} else if (strcmp(name, "center") == 0) {
-		*out = MANJU_FIT_CENTER;
+		*out = SWEETBG_FIT_CENTER;
 	} else if (strcmp(name, "tile") == 0) {
-		*out = MANJU_FIT_TILE;
+		*out = SWEETBG_FIT_TILE;
 	} else {
 		return false;
 	}
 	return true;
 }
 
-void manju_config_defaults(struct manju_config *cfg) {
+void sweetbg_config_defaults(struct sweetbg_config *cfg) {
 	cfg->image[0] = '\0';
 	cfg->color = DEFAULT_COLOR;
-	cfg->fit = MANJU_FIT_COVER;
+	cfg->fit = SWEETBG_FIT_COVER;
 	cfg->output_count = 0;
 }
 
@@ -94,7 +94,7 @@ static int hex_value(char c) {
 	return -1;
 }
 
-bool manju_config_parse_color(const char *s, uint32_t *out) {
+bool sweetbg_config_parse_color(const char *s, uint32_t *out) {
 	if (strlen(s) != 7 || s[0] != '#') {
 		return false;
 	}
@@ -110,7 +110,7 @@ bool manju_config_parse_color(const char *s, uint32_t *out) {
 	return true;
 }
 
-static bool apply_pair(struct manju_config *cfg, const char *key,
+static bool apply_pair(struct sweetbg_config *cfg, const char *key,
 	const char *value, const char *name, int line, char *err,
 	size_t err_size) {
 	char text[PATH_MAX];
@@ -125,7 +125,7 @@ static bool apply_pair(struct manju_config *cfg, const char *key,
 		return true;
 	}
 	if (strcmp(key, "color") == 0) {
-		if (!manju_config_parse_color(text, &cfg->color)) {
+		if (!sweetbg_config_parse_color(text, &cfg->color)) {
 			snprintf(err, err_size,
 				"%s:%d: color must be \"#rrggbb\"", name, line);
 			return false;
@@ -133,7 +133,7 @@ static bool apply_pair(struct manju_config *cfg, const char *key,
 		return true;
 	}
 	if (strcmp(key, "fit") == 0) {
-		if (!manju_fit_from_name(text, &cfg->fit)) {
+		if (!sweetbg_fit_from_name(text, &cfg->fit)) {
 			snprintf(err, err_size,
 				"%s:%d: fit must be \"cover\", \"contain\", "
 				"\"center\", or \"tile\"",
@@ -147,7 +147,7 @@ static bool apply_pair(struct manju_config *cfg, const char *key,
 	return false;
 }
 
-static bool apply_output_pair(struct manju_config_output *output,
+static bool apply_output_pair(struct sweetbg_config_output *output,
 	const char *key, const char *value, const char *name, int line,
 	char *err, size_t err_size) {
 	char text[PATH_MAX];
@@ -162,7 +162,7 @@ static bool apply_output_pair(struct manju_config_output *output,
 		return true;
 	}
 	if (strcmp(key, "fit") == 0) {
-		if (!manju_fit_from_name(text, &output->fit)) {
+		if (!sweetbg_fit_from_name(text, &output->fit)) {
 			snprintf(err, err_size,
 				"%s:%d: fit must be \"cover\", \"contain\", "
 				"\"center\", or \"tile\"",
@@ -177,7 +177,7 @@ static bool apply_output_pair(struct manju_config_output *output,
 	return false;
 }
 
-static struct manju_config_output *parse_section(struct manju_config *cfg,
+static struct sweetbg_config_output *parse_section(struct sweetbg_config *cfg,
 	char *line, const char *name, int lineno, char *err, size_t err_size) {
 	char *close = strchr(line, ']');
 	const char *after = close != NULL ? close + 1 : NULL;
@@ -211,25 +211,25 @@ static struct manju_config_output *parse_section(struct manju_config *cfg,
 			return &cfg->outputs[i];
 		}
 	}
-	if (cfg->output_count >= MANJU_CONFIG_MAX_OUTPUTS) {
+	if (cfg->output_count >= SWEETBG_CONFIG_MAX_OUTPUTS) {
 		snprintf(err, err_size, "%s:%d: too many [output] sections",
 			name, lineno);
 		return NULL;
 	}
-	struct manju_config_output *out = &cfg->outputs[cfg->output_count++];
+	struct sweetbg_config_output *out = &cfg->outputs[cfg->output_count++];
 	memcpy(out->name, output_name, strlen(output_name) + 1);
 	out->image[0] = '\0';
-	out->fit = MANJU_FIT_COVER;
+	out->fit = SWEETBG_FIT_COVER;
 	out->has_image = false;
 	out->has_fit = false;
 	return out;
 }
 
-bool manju_config_parse(FILE *fp, const char *name, struct manju_config *cfg,
-	char *err, size_t err_size) {
+bool sweetbg_config_parse(FILE *fp, const char *name,
+	struct sweetbg_config *cfg, char *err, size_t err_size) {
 	char buffer[CONFIG_LINE_MAX];
 	int line = 0;
-	struct manju_config_output *current = NULL;
+	struct sweetbg_config_output *current = NULL;
 	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
 		line++;
 		if (strchr(buffer, '\n') == NULL && feof(fp) == 0) {
@@ -278,26 +278,27 @@ bool manju_config_parse(FILE *fp, const char *name, struct manju_config *cfg,
 	return true;
 }
 
-bool manju_config_path(char *out, size_t out_size) {
+bool sweetbg_config_path(char *out, size_t out_size) {
 	const char *xdg = getenv("XDG_CONFIG_HOME");
 	if (xdg != NULL && xdg[0] != '\0') {
-		int n = snprintf(out, out_size, "%s/manju/config.toml", xdg);
+		int n = snprintf(out, out_size, "%s/sweetbg/config.toml", xdg);
 		return n > 0 && (size_t)n < out_size;
 	}
 	const char *home = getenv("HOME");
 	if (home != NULL && home[0] != '\0') {
 		int n = snprintf(
-			out, out_size, "%s/.config/manju/config.toml", home);
+			out, out_size, "%s/.config/sweetbg/config.toml", home);
 		return n > 0 && (size_t)n < out_size;
 	}
 	return false;
 }
 
-bool manju_config_load(struct manju_config *cfg, char *err, size_t err_size) {
-	manju_config_defaults(cfg);
+bool sweetbg_config_load(
+	struct sweetbg_config *cfg, char *err, size_t err_size) {
+	sweetbg_config_defaults(cfg);
 
 	char path[PATH_MAX];
-	if (!manju_config_path(path, sizeof(path))) {
+	if (!sweetbg_config_path(path, sizeof(path))) {
 		return true;
 	}
 
@@ -310,10 +311,10 @@ bool manju_config_load(struct manju_config *cfg, char *err, size_t err_size) {
 		return false;
 	}
 
-	bool ok = manju_config_parse(fp, path, cfg, err, err_size);
+	bool ok = sweetbg_config_parse(fp, path, cfg, err, err_size);
 	fclose(fp);
 	if (!ok) {
-		manju_config_defaults(cfg);
+		sweetbg_config_defaults(cfg);
 	}
 	return ok;
 }

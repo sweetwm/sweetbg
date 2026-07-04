@@ -24,13 +24,13 @@ static int test_roundtrip(void) {
 
 	const char *msg = "/path/to/wall.png";
 	uint32_t msg_len = (uint32_t)strlen(msg);
-	CHECK(manju_ipc_send_frame(sv[0], MANJU_CMD_STOP, msg, msg_len));
+	CHECK(sweetbg_ipc_send_frame(sv[0], SWEETBG_CMD_STOP, msg, msg_len));
 
 	uint8_t type;
-	uint8_t buf[MANJU_IPC_MAX_PAYLOAD];
+	uint8_t buf[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
-	CHECK(manju_ipc_recv_frame(sv[1], &type, buf, &len, sizeof(buf)));
-	CHECK(type == MANJU_CMD_STOP);
+	CHECK(sweetbg_ipc_recv_frame(sv[1], &type, buf, &len, sizeof(buf)));
+	CHECK(type == SWEETBG_CMD_STOP);
 	CHECK(len == msg_len);
 	CHECK(memcmp(buf, msg, msg_len) == 0);
 
@@ -43,13 +43,13 @@ static int test_empty_payload(void) {
 	int sv[2];
 	CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
 
-	CHECK(manju_ipc_send_frame(sv[0], MANJU_STATUS_OK, NULL, 0));
+	CHECK(sweetbg_ipc_send_frame(sv[0], SWEETBG_STATUS_OK, NULL, 0));
 
 	uint8_t type;
 	uint8_t buf[16];
 	uint32_t len;
-	CHECK(manju_ipc_recv_frame(sv[1], &type, buf, &len, sizeof(buf)));
-	CHECK(type == MANJU_STATUS_OK);
+	CHECK(sweetbg_ipc_recv_frame(sv[1], &type, buf, &len, sizeof(buf)));
+	CHECK(type == SWEETBG_STATUS_OK);
 	CHECK(len == 0);
 
 	close(sv[0]);
@@ -62,8 +62,8 @@ static int test_send_rejects_oversize(void) {
 	CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
 
 	// Length over the cap must be refused before any byte is written
-	CHECK(!manju_ipc_send_frame(
-		sv[0], MANJU_CMD_STOP, NULL, MANJU_IPC_MAX_PAYLOAD + 1));
+	CHECK(!sweetbg_ipc_send_frame(
+		sv[0], SWEETBG_CMD_STOP, NULL, SWEETBG_IPC_MAX_PAYLOAD + 1));
 
 	close(sv[0]);
 	close(sv[1]);
@@ -74,14 +74,14 @@ static int test_recv_rejects_bad_version(void) {
 	int sv[2];
 	CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
 
-	uint8_t header[MANJU_IPC_HEADER_SIZE] = {
-		99, MANJU_CMD_STOP, 0, 0, 0, 0, 0, 0};
+	uint8_t header[SWEETBG_IPC_HEADER_SIZE] = {
+		99, SWEETBG_CMD_STOP, 0, 0, 0, 0, 0, 0};
 	CHECK(write(sv[0], header, sizeof(header)) == (ssize_t)sizeof(header));
 
 	uint8_t type;
 	uint8_t buf[16];
 	uint32_t len;
-	CHECK(!manju_ipc_recv_frame(sv[1], &type, buf, &len, sizeof(buf)));
+	CHECK(!sweetbg_ipc_recv_frame(sv[1], &type, buf, &len, sizeof(buf)));
 
 	close(sv[0]);
 	close(sv[1]);
@@ -93,14 +93,14 @@ static int test_recv_rejects_oversize_length(void) {
 	CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
 
 	// A header claiming a 4 GiB payload must be rejected, not allocated for
-	uint8_t header[MANJU_IPC_HEADER_SIZE] = {MANJU_IPC_VERSION,
-		MANJU_CMD_STOP, 0, 0, 0xff, 0xff, 0xff, 0xff};
+	uint8_t header[SWEETBG_IPC_HEADER_SIZE] = {SWEETBG_IPC_VERSION,
+		SWEETBG_CMD_STOP, 0, 0, 0xff, 0xff, 0xff, 0xff};
 	CHECK(write(sv[0], header, sizeof(header)) == (ssize_t)sizeof(header));
 
 	uint8_t type;
 	uint8_t buf[16];
 	uint32_t len;
-	CHECK(!manju_ipc_recv_frame(sv[1], &type, buf, &len, sizeof(buf)));
+	CHECK(!sweetbg_ipc_recv_frame(sv[1], &type, buf, &len, sizeof(buf)));
 
 	close(sv[0]);
 	close(sv[1]);
@@ -111,22 +111,22 @@ static int test_fd_passing(void) {
 	int sv[2];
 	CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
 
-	int memfd = memfd_create("manju-test", MFD_CLOEXEC);
+	int memfd = memfd_create("sweetbg-test", MFD_CLOEXEC);
 	CHECK(memfd >= 0);
 	const char *content = "PIXELS";
 	CHECK(write(memfd, content, 6) == 6);
 
 	const char *meta = "DP-1";
-	CHECK(manju_ipc_send_frame_fd(
-		sv[0], MANJU_CMD_IMG_PREPARED, meta, 4, memfd));
+	CHECK(sweetbg_ipc_send_frame_fd(
+		sv[0], SWEETBG_CMD_IMG_PREPARED, meta, 4, memfd));
 
 	uint8_t type;
 	uint8_t buf[64];
 	uint32_t len;
 	int rfd = -1;
-	CHECK(manju_ipc_recv_frame_fd(
+	CHECK(sweetbg_ipc_recv_frame_fd(
 		sv[1], &type, buf, &len, sizeof(buf), &rfd));
-	CHECK(type == MANJU_CMD_IMG_PREPARED);
+	CHECK(type == SWEETBG_CMD_IMG_PREPARED);
 	CHECK(len == 4 && memcmp(buf, meta, 4) == 0);
 	CHECK(rfd >= 0 && rfd != memfd);
 
@@ -145,15 +145,15 @@ static int test_fd_passing(void) {
 static int test_no_fd(void) {
 	int sv[2];
 	CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
-	CHECK(manju_ipc_send_frame_fd(sv[0], MANJU_CMD_STOP, NULL, 0, -1));
+	CHECK(sweetbg_ipc_send_frame_fd(sv[0], SWEETBG_CMD_STOP, NULL, 0, -1));
 
 	uint8_t type;
 	uint8_t buf[16];
 	uint32_t len;
 	int rfd = 0;
-	CHECK(manju_ipc_recv_frame_fd(
+	CHECK(sweetbg_ipc_recv_frame_fd(
 		sv[1], &type, buf, &len, sizeof(buf), &rfd));
-	CHECK(type == MANJU_CMD_STOP && len == 0 && rfd == -1);
+	CHECK(type == SWEETBG_CMD_STOP && len == 0 && rfd == -1);
 
 	close(sv[0]);
 	close(sv[1]);

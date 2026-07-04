@@ -17,7 +17,7 @@ static int expect(const char *input, const char *output_name, const char *image,
 	const char *want) {
 	char *out = NULL;
 	char err[256];
-	if (!manju_config_patch_image(
+	if (!sweetbg_config_patch_image(
 		    input, output_name, image, &out, err, sizeof(err))) {
 		fprintf(stderr, "patch failed: %s\n", err);
 		return 1;
@@ -36,7 +36,7 @@ static int expect_setting(const char *input, const char *key, const char *value,
 	const char *want) {
 	char *out = NULL;
 	char err[256];
-	if (!manju_config_patch_setting(
+	if (!sweetbg_config_patch_setting(
 		    input, key, value, &out, err, sizeof(err))) {
 		fprintf(stderr, "patch failed: %s\n", err);
 		return 1;
@@ -54,7 +54,7 @@ static int expect_output_setting(const char *input, const char *output_name,
 	const char *key, const char *value, const char *want) {
 	char *out = NULL;
 	char err[256];
-	if (!manju_config_patch_output_setting(
+	if (!sweetbg_config_patch_output_setting(
 		    input, output_name, key, value, &out, err, sizeof(err))) {
 		fprintf(stderr, "patch failed: %s\n", err);
 		return 1;
@@ -72,7 +72,7 @@ static int expect_clear_image(
 	const char *input, const char *output_name, const char *want) {
 	char *out = NULL;
 	char err[256];
-	if (!manju_config_patch_clear_image(
+	if (!sweetbg_config_patch_clear_image(
 		    input, output_name, &out, err, sizeof(err))) {
 		fprintf(stderr, "patch failed: %s\n", err);
 		return 1;
@@ -90,7 +90,7 @@ static int expect_clear_fit(
 	const char *input, const char *output_name, const char *want) {
 	char *out = NULL;
 	char err[256];
-	if (!manju_config_patch_clear_fit(
+	if (!sweetbg_config_patch_clear_fit(
 		    input, output_name, &out, err, sizeof(err))) {
 		fprintf(stderr, "patch failed: %s\n", err);
 		return 1;
@@ -108,7 +108,7 @@ static int expect_blank_output(
 	const char *input, const char *output_name, const char *want) {
 	char *out = NULL;
 	char err[256];
-	if (!manju_config_patch_blank_output(
+	if (!sweetbg_config_patch_blank_output(
 		    input, output_name, &out, err, sizeof(err))) {
 		fprintf(stderr, "patch failed: %s\n", err);
 		return 1;
@@ -299,20 +299,21 @@ static int test_blank_output_appends_section(void) {
 static int test_rejects_bad_input(void) {
 	char *out = NULL;
 	char err[256];
-	CHECK(!manju_config_patch_image(
+	CHECK(!sweetbg_config_patch_image(
 		"", NULL, "/has\"quote.jpg", &out, err, sizeof(err)));
-	CHECK(!manju_config_patch_image(
+	CHECK(!sweetbg_config_patch_image(
 		"", "bad name", "/ok.jpg", &out, err, sizeof(err)));
-	CHECK(!manju_config_patch_image(
+	CHECK(!sweetbg_config_patch_image(
 		"", "a]b", "/ok.jpg", &out, err, sizeof(err)));
-	CHECK(!manju_config_patch_output_setting(
+	CHECK(!sweetbg_config_patch_output_setting(
 		"", "bad name", "fit", "cover", &out, err, sizeof(err)));
-	CHECK(!manju_config_patch_clear_image(
+	CHECK(!sweetbg_config_patch_clear_image(
 		"", "bad name", &out, err, sizeof(err)));
-	CHECK(!manju_config_patch_clear_fit("", "a]b", &out, err, sizeof(err)));
-	CHECK(!manju_config_patch_blank_output(
+	CHECK(!sweetbg_config_patch_clear_fit(
+		"", "a]b", &out, err, sizeof(err)));
+	CHECK(!sweetbg_config_patch_blank_output(
 		"", NULL, &out, err, sizeof(err)));
-	CHECK(!manju_config_patch_blank_output(
+	CHECK(!sweetbg_config_patch_blank_output(
 		"", "bad name", &out, err, sizeof(err)));
 	return 0;
 }

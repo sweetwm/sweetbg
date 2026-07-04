@@ -16,8 +16,8 @@ static void on_error(j_common_ptr cinfo) {
 	longjmp(guard->jmp, 1);
 }
 
-bool manju_decode_jpeg(
-	FILE *fp, struct manju_image *img, char *err, size_t err_size) {
+bool sweetbg_decode_jpeg(
+	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size) {
 	struct jpeg_decompress_struct cinfo;
 	struct jpeg_guard guard;
 	cinfo.err = jpeg_std_error(&guard.base);
@@ -35,7 +35,8 @@ bool manju_decode_jpeg(
 	jpeg_stdio_src(&cinfo, fp);
 	jpeg_read_header(&cinfo, TRUE);
 
-	if (!manju_image_dimensions_ok(cinfo.image_width, cinfo.image_height)) {
+	if (!sweetbg_image_dimensions_ok(
+		    cinfo.image_width, cinfo.image_height)) {
 		snprintf(err, err_size, "jpeg: image too large");
 		jpeg_destroy_decompress(&cinfo);
 		return false;

@@ -16,8 +16,8 @@ static void rgba_to_xrgb(uint8_t *pixels, size_t pixel_count) {
 	}
 }
 
-bool manju_decode_png(
-	FILE *fp, struct manju_image *img, char *err, size_t err_size) {
+bool sweetbg_decode_png(
+	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size) {
 	png_structp png =
 		png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 	if (png == NULL) {
@@ -47,7 +47,7 @@ bool manju_decode_png(
 
 	uint32_t width = png_get_image_width(png, info);
 	uint32_t height = png_get_image_height(png, info);
-	if (!manju_image_dimensions_ok(width, height)) {
+	if (!sweetbg_image_dimensions_ok(width, height)) {
 		snprintf(err, err_size, "png: image too large");
 		png_destroy_read_struct(&png, &info, NULL);
 		return false;

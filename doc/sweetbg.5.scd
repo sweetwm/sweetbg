@@ -1,21 +1,21 @@
-manju(5)
+sweetbg(5)
 
 # NAME
 
-manju - configuration file for the manju wallpaper daemon
+sweetbg - configuration file for the sweetbg wallpaper daemon
 
 # DESCRIPTION
 
-*manjud*(1) reads _$XDG_CONFIG_HOME/manju/config.toml_, falling back to
-_~/.config/manju/config.toml_. The file is read once at startup; there is no
+*sweetbgd*(1) reads _$XDG_CONFIG_HOME/sweetbg/config.toml_, falling back to
+_~/.config/sweetbg/config.toml_. The file is read once at startup; there is no
 hot reload, so restart the daemon to apply edits.
 
 A missing file uses safe defaults. A malformed file is reported with its path
 and line number, and the daemon continues with defaults rather than failing to
-start. Runtime *manju img* and *manju set* changes are not written back to
-this file unless *--persist* is given (see *manju*(1)), which rewrites only the
+start. Runtime *sweetbg img* and *sweetbg set* changes are not written back to
+this file unless *--persist* is given (see *sweetbg*(1)), which rewrites only the
 affected setting and preserves other keys, comments, and sections.
-Runtime *manju clear --persist* removes the matching saved keys while preserving
+Runtime *sweetbg clear --persist* removes the matching saved keys while preserving
 the rest of the file.
 
 The format is a small subset of TOML: top-level _key = "value"_ entries with
@@ -29,7 +29,7 @@ These top-level keys set the defaults applied to every output:
 
 *image*
 	Absolute path to the default wallpaper (JPEG, PNG, or WebP). When unset,
-	the placeholder color is shown until an image is set with *manju*(1).
+	the placeholder color is shown until an image is set with *sweetbg*(1).
 
 *color*
 	Background color, as _"#rrggbb"_. Shown before an image is set, and behind
@@ -50,14 +50,14 @@ These top-level keys set the defaults applied to every output:
 # PER-OUTPUT SECTIONS
 
 An _[output.NAME]_ section sets wallpaper choices for one output. NAME is the
-output name shown by *manju query* (for example _DP-1_ or _HDMI-A-1_). The
+output name shown by *sweetbg query* (for example _DP-1_ or _HDMI-A-1_). The
 supported keys are *image* and *fit*, and each key overrides only that
 top-level default. An output without a matching section uses the top-level
 defaults.
 
 Set *image* to an empty string to intentionally show the background color on one
 output even when a top-level default image exists. This is what
-*manju clear --output* <name> *--blank --persist* writes.
+*sweetbg clear --output* <name> *--blank --persist* writes.
 
 # EXAMPLE
 
@@ -76,4 +76,4 @@ image = "/home/me/Pictures/tv.png"
 
 # SEE ALSO
 
-*manju*(1), *manjud*(1)
+*sweetbg*(1), *sweetbgd*(1)

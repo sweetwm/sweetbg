@@ -11,7 +11,7 @@
 #define MAX_PIXELS (1u << 26)
 #define BYTES_PER_PIXEL 4
 
-bool manju_image_dimensions_ok(uint32_t width, uint32_t height) {
+bool sweetbg_image_dimensions_ok(uint32_t width, uint32_t height) {
 	if (width == 0 || height == 0 || width > MAX_DIMENSION ||
 		height > MAX_DIMENSION) {
 		return false;
@@ -35,8 +35,8 @@ static bool is_webp(const uint8_t *sig, size_t n) {
 	       memcmp(sig + 8, "WEBP", 4) == 0;
 }
 
-bool manju_image_load(
-	struct manju_image *img, const char *path, char *err, size_t err_size) {
+bool sweetbg_image_load(struct sweetbg_image *img, const char *path, char *err,
+	size_t err_size) {
 	img->width = 0;
 	img->height = 0;
 	img->pixels = NULL;
@@ -57,11 +57,11 @@ bool manju_image_load(
 
 	bool ok;
 	if (is_png(sig, got)) {
-		ok = manju_decode_png(fp, img, err, err_size);
+		ok = sweetbg_decode_png(fp, img, err, err_size);
 	} else if (is_jpeg(sig, got)) {
-		ok = manju_decode_jpeg(fp, img, err, err_size);
+		ok = sweetbg_decode_jpeg(fp, img, err, err_size);
 	} else if (is_webp(sig, got)) {
-		ok = manju_decode_webp(fp, img, err, err_size);
+		ok = sweetbg_decode_webp(fp, img, err, err_size);
 	} else {
 		snprintf(err, err_size, "unsupported image format");
 		ok = false;
@@ -71,15 +71,15 @@ bool manju_image_load(
 	return ok;
 }
 
-void manju_image_free(struct manju_image *img) {
+void sweetbg_image_free(struct sweetbg_image *img) {
 	free(img->pixels);
 	img->pixels = NULL;
 	img->width = 0;
 	img->height = 0;
 }
 
-static void sample_box(const struct manju_image *src,
-	const struct manju_rect *crop, uint32_t out_w, uint32_t out_h,
+static void sample_box(const struct sweetbg_image *src,
+	const struct sweetbg_rect *crop, uint32_t out_w, uint32_t out_h,
 	uint32_t ox, uint32_t oy, uint8_t *out) {
 	uint32_t sx0 = crop->x + (uint32_t)((uint64_t)ox * crop->w / out_w);
 	uint32_t sx1 =
@@ -133,8 +133,8 @@ static void fill_color(
 	}
 }
 
-static void blit_placement(const struct manju_image *src,
-	const struct manju_placement *place, uint32_t out_w, uint8_t *dst) {
+static void blit_placement(const struct sweetbg_image *src,
+	const struct sweetbg_placement *place, uint32_t out_w, uint8_t *dst) {
 	for (uint32_t ly = 0; ly < place->dst.h; ly++) {
 		uint32_t oy = place->dst.y + ly;
 		uint8_t *out_row = dst + (uint64_t)oy * out_w * BYTES_PER_PIXEL;
@@ -147,7 +147,7 @@ static void blit_placement(const struct manju_image *src,
 	}
 }
 
-static void render_tile(const struct manju_image *src, uint32_t out_w,
+static void render_tile(const struct sweetbg_image *src, uint32_t out_w,
 	uint32_t out_h, uint8_t *dst) {
 	for (uint32_t oy = 0; oy < out_h; oy++) {
 		uint32_t sy = oy % src->height;
@@ -164,32 +164,32 @@ static void render_tile(const struct manju_image *src, uint32_t out_w,
 	}
 }
 
-bool manju_image_render(const struct manju_image *src, enum manju_fit fit,
+bool sweetbg_image_render(const struct sweetbg_image *src, enum sweetbg_fit fit,
 	uint32_t out_w, uint32_t out_h, uint32_t color, uint8_t *dst) {
 	if (src->pixels == NULL || src->width == 0 || src->height == 0 ||
 		out_w == 0 || out_h == 0) {
 		return false;
 	}
 
-	struct manju_placement place;
+	struct sweetbg_placement place;
 	switch (fit) {
-	case MANJU_FIT_TILE:
+	case SWEETBG_FIT_TILE:
 		render_tile(src, out_w, out_h, dst);
 		return true;
-	case MANJU_FIT_CONTAIN:
+	case SWEETBG_FIT_CONTAIN:
 		fill_color(dst, out_w, out_h, color);
-		manju_contain_rects(
+		sweetbg_contain_rects(
 			src->width, src->height, out_w, out_h, &place);
 		break;
-	case MANJU_FIT_CENTER:
+	case SWEETBG_FIT_CENTER:
 		fill_color(dst, out_w, out_h, color);
-		manju_center_rects(
+		sweetbg_center_rects(
 			src->width, src->height, out_w, out_h, &place);
 		break;
-	case MANJU_FIT_COVER:
+	case SWEETBG_FIT_COVER:
 	default:
-		place.dst = (struct manju_rect){0, 0, out_w, out_h};
-		manju_cover_rect(
+		place.dst = (struct sweetbg_rect){0, 0, out_w, out_h};
+		sweetbg_cover_rect(
 			src->width, src->height, out_w, out_h, &place.src);
 		break;
 	}

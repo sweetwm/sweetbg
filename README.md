@@ -57,11 +57,16 @@ sweetbg set color "#1e1e2e" --persist
 
 sweetbg clear
 sweetbg query
+sweetbg doctor
 sweetbg stop
 ```
 
 Output names come from `sweetbg query`. Fit modes are `cover`, `contain`,
 `center`, and `tile`.
+
+Use `sweetbg doctor` to check the session environment, config file, socket, and
+daemon reachability when Sweetbg does not start or a client command cannot
+connect.
 
 ## Configuration
 

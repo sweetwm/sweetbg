@@ -7,6 +7,7 @@
 
 #include "config/config.h"
 #include "config/config_write.h"
+#include "doctor/doctor.h"
 #include "ipc/client.h"
 #include "ipc/protocol.h"
 
@@ -363,6 +364,8 @@ static void usage(FILE *out) {
 	      "  clear --fit [--output <name>]\n"
 	      "                             clear fit state\n"
 	      "  query                      print daemon and output status\n"
+	      "  doctor                     check setup and daemon "
+	      "reachability\n"
 	      "  stop                       stop the running daemon\n"
 	      "\n"
 	      "img/set/clear options:\n"
@@ -423,6 +426,10 @@ int main(int argc, char **argv) {
 
 	if (strcmp(cmd, "query") == 0) {
 		return sweetbg_client_request(SWEETBG_CMD_QUERY, NULL, 0);
+	}
+
+	if (strcmp(cmd, "doctor") == 0) {
+		return sweetbg_doctor_run();
 	}
 
 	fprintf(stderr, "sweetbg: unknown command '%s'\n", cmd);

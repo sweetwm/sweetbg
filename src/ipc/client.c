@@ -1,6 +1,7 @@
 #include "ipc/client.h"
 
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,28 +19,47 @@
 
 #define REPLY_TIMEOUT_SECONDS 5
 
-static int connect_to_daemon(void) {
+static void client_error(char *err, size_t err_size, const char *message) {
+	if (err != NULL && err_size > 0) {
+		snprintf(err, err_size, "%s", message);
+	} else {
+		fprintf(stderr, "sweetbg: %s\n", message);
+	}
+}
+
+__attribute__((format(printf, 3, 4))) static void client_errorf(
+	char *err, size_t err_size, const char *fmt, ...) {
+	char message[256];
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(message, sizeof(message), fmt, ap);
+	va_end(ap);
+	client_error(err, err_size, message);
+}
+
+static int connect_to_daemon(char *err, size_t err_size) {
 	struct sockaddr_un addr;
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 	if (!sweetbg_ipc_socket_path(addr.sun_path, sizeof(addr.sun_path))) {
-		fprintf(stderr, "sweetbg: XDG_RUNTIME_DIR is unset or the "
-				"socket path is too long\n");
+		client_error(err, err_size,
+			"XDG_RUNTIME_DIR is unset or the socket path is too "
+			"long");
 		return -1;
 	}
 
 	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (fd < 0) {
-		fprintf(stderr, "sweetbg: cannot create socket: %s\n",
+		client_errorf(err, err_size, "cannot create socket: %s",
 			strerror(errno));
 		return -1;
 	}
 
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		if (errno == ENOENT || errno == ECONNREFUSED) {
-			fprintf(stderr, "sweetbg: no daemon is running\n");
+			client_error(err, err_size, "no daemon is running");
 		} else {
-			fprintf(stderr, "sweetbg: cannot connect to %s: %s\n",
+			client_errorf(err, err_size, "cannot connect to %s: %s",
 				addr.sun_path, strerror(errno));
 		}
 		close(fd);
@@ -56,33 +76,43 @@ static int connect_to_daemon(void) {
 
 int sweetbg_client_request(
 	uint8_t command, const void *payload, uint32_t payload_len) {
-	int fd = connect_to_daemon();
-	if (fd < 0) {
-		return 1;
-	}
-
-	if (!sweetbg_ipc_send_frame(fd, command, payload, payload_len)) {
-		fprintf(stderr, "sweetbg: failed to send request\n");
-		close(fd);
-		return 1;
-	}
-
 	uint8_t type;
 	uint8_t response[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
-	if (!sweetbg_ipc_recv_frame(
-		    fd, &type, response, &len, sizeof(response))) {
-		fprintf(stderr, "sweetbg: no valid response from daemon\n");
-		close(fd);
+
+	if (sweetbg_client_raw_request(command, payload, payload_len, &type,
+		    response, &len, sizeof(response), NULL, 0) != 0) {
 		return 1;
 	}
-	close(fd);
 
 	bool ok = type == SWEETBG_STATUS_OK;
 	if (len > 0) {
 		fprintf(ok ? stdout : stderr, "%.*s\n", (int)len, response);
 	}
 	return ok ? 0 : 1;
+}
+
+int sweetbg_client_raw_request(uint8_t command, const void *payload,
+	uint32_t payload_len, uint8_t *type, void *response, uint32_t *len,
+	uint32_t max, char *err, size_t err_size) {
+	int fd = connect_to_daemon(err, err_size);
+	if (fd < 0) {
+		return -1;
+	}
+
+	if (!sweetbg_ipc_send_frame(fd, command, payload, payload_len)) {
+		client_error(err, err_size, "failed to send request");
+		close(fd);
+		return -1;
+	}
+
+	if (!sweetbg_ipc_recv_frame(fd, type, response, len, max)) {
+		client_error(err, err_size, "no valid response from daemon");
+		close(fd);
+		return -1;
+	}
+	close(fd);
+	return 0;
 }
 
 struct output_info {
@@ -97,7 +127,7 @@ static int query_outputs(struct output_info *list, int max,
 	enum sweetbg_fit *fit, uint32_t *color) {
 	*fit = SWEETBG_FIT_COVER;
 	*color = 0;
-	int fd = connect_to_daemon();
+	int fd = connect_to_daemon(NULL, 0);
 	if (fd < 0) {
 		return -1;
 	}
@@ -234,7 +264,7 @@ static int send_prepared(const struct output_info *out, uint32_t mode,
 	memcpy(payload + off, path, path_len);
 	off += path_len;
 
-	int fd = connect_to_daemon();
+	int fd = connect_to_daemon(NULL, 0);
 	if (fd < 0) {
 		return 1;
 	}

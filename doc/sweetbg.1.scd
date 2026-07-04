@@ -73,6 +73,13 @@ parses arguments, sends one request, prints the response, and returns.
 	the default fit mode, followed by one line per output with its name,
 	resolution, scale, and any per-output override.
 
+*doctor*
+	Check the Sweetbg setup and print a compact diagnostic report. It verifies
+	the session environment, config file syntax and configured image paths,
+	the control socket, and daemon reachability. Warnings do not make the
+	command fail; configuration errors, invalid runtime paths, socket
+	ownership problems, or an unreachable daemon return a failure status.
+
 *stop*
 	Ask the running daemon to exit.
 

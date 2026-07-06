@@ -22,7 +22,8 @@ struct sweetbg_surface {
 	uint32_t height;
 	bool configured;
 	bool needs_repaint;
-	struct sweetbg_buffer buffer;
+	struct sweetbg_buffer *buffer;
+	struct sweetbg_buffer *retired_buffers;
 	struct wp_viewport *viewport;
 	struct wp_fractional_scale_v1 *fractional;
 	// Preferred scale as 120ths (e.g. 180 = 1.5x); 0 until one is received

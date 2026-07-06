@@ -16,6 +16,8 @@ struct sweetbg_buffer {
 	size_t size;
 	uint32_t width;
 	uint32_t height;
+	bool released;
+	struct sweetbg_buffer *next;
 };
 
 bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,

@@ -1,5 +1,7 @@
 #include "wayland/surface.h"
 
+#include <stdlib.h>
+
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
@@ -60,6 +62,8 @@ bool sweetbg_surface_create(struct sweetbg_surface *surface,
 	surface->height = 0;
 	surface->configured = false;
 	surface->needs_repaint = false;
+	surface->buffer = NULL;
+	surface->retired_buffers = NULL;
 	surface->viewport = NULL;
 	surface->fractional = NULL;
 	surface->fractional_scale = 0;
@@ -127,6 +131,9 @@ void sweetbg_surface_buffer_size(const struct sweetbg_surface *surface,
 	*pixel_height = surface->height * (uint32_t)int_scale;
 }
 
+static void free_buffer(struct sweetbg_buffer *buffer);
+static void retire_buffer(struct sweetbg_surface *surface);
+
 static bool prepare_buffer(struct sweetbg_surface *surface, struct wl_shm *shm,
 	int32_t scale, uint32_t *pixel_width, uint32_t *pixel_height) {
 	if (!surface->configured || surface->wl_surface == NULL) {
@@ -136,11 +143,16 @@ static bool prepare_buffer(struct sweetbg_surface *surface, struct wl_shm *shm,
 	uint32_t ph;
 	sweetbg_surface_buffer_size(surface, scale, &pw, &ph);
 
-	// Release any previous buffer before replacing it
-	sweetbg_buffer_destroy(&surface->buffer);
-	if (!sweetbg_buffer_create(&surface->buffer, shm, pw, ph)) {
+	struct sweetbg_buffer *buffer = calloc(1, sizeof(*buffer));
+	if (buffer == NULL) {
 		return false;
 	}
+	if (!sweetbg_buffer_create(buffer, shm, pw, ph)) {
+		free(buffer);
+		return false;
+	}
+	retire_buffer(surface);
+	surface->buffer = buffer;
 	*pixel_width = pw;
 	*pixel_height = ph;
 	return true;
@@ -158,7 +170,8 @@ static void present(struct sweetbg_surface *surface, int32_t scale,
 		}
 		wl_surface_set_buffer_scale(surface->wl_surface, scale);
 	}
-	wl_surface_attach(surface->wl_surface, surface->buffer.wl_buffer, 0, 0);
+	wl_surface_attach(
+		surface->wl_surface, surface->buffer->wl_buffer, 0, 0);
 	wl_surface_damage_buffer(surface->wl_surface, 0, 0,
 		(int32_t)pixel_width, (int32_t)pixel_height);
 	wl_surface_commit(surface->wl_surface);
@@ -172,7 +185,7 @@ bool sweetbg_surface_paint_color(struct sweetbg_surface *surface,
 	if (!prepare_buffer(surface, shm, scale, &pw, &ph)) {
 		return false;
 	}
-	sweetbg_buffer_fill(&surface->buffer, color);
+	sweetbg_buffer_fill(surface->buffer, color);
 	present(surface, scale, pw, ph);
 	return true;
 }
@@ -187,13 +200,53 @@ bool sweetbg_surface_attach_prepared(struct sweetbg_surface *surface,
 		scale = 1;
 	}
 
-	// Release any previous buffer before replacing it
-	sweetbg_buffer_destroy(&surface->buffer);
-	if (!sweetbg_buffer_from_fd(&surface->buffer, shm, fd, width, height)) {
+	struct sweetbg_buffer *buffer = calloc(1, sizeof(*buffer));
+	if (buffer == NULL) {
 		return false;
 	}
+	if (!sweetbg_buffer_from_fd(buffer, shm, fd, width, height)) {
+		free(buffer);
+		return false;
+	}
+	retire_buffer(surface);
+	surface->buffer = buffer;
 	present(surface, scale, width, height);
 	return true;
+}
+
+static void free_buffer(struct sweetbg_buffer *buffer) {
+	if (buffer == NULL) {
+		return;
+	}
+	sweetbg_buffer_destroy(buffer);
+	free(buffer);
+}
+
+static void collect_retired_buffers(struct sweetbg_surface *surface) {
+	struct sweetbg_buffer **cursor = &surface->retired_buffers;
+	while (*cursor != NULL) {
+		struct sweetbg_buffer *buffer = *cursor;
+		if (!buffer->released) {
+			cursor = &buffer->next;
+			continue;
+		}
+		*cursor = buffer->next;
+		free_buffer(buffer);
+	}
+}
+
+static void retire_buffer(struct sweetbg_surface *surface) {
+	collect_retired_buffers(surface);
+	if (surface->buffer == NULL) {
+		return;
+	}
+	if (surface->buffer->released) {
+		free_buffer(surface->buffer);
+	} else {
+		surface->buffer->next = surface->retired_buffers;
+		surface->retired_buffers = surface->buffer;
+	}
+	surface->buffer = NULL;
 }
 
 void sweetbg_surface_destroy(struct sweetbg_surface *surface) {
@@ -214,6 +267,12 @@ void sweetbg_surface_destroy(struct sweetbg_surface *surface) {
 		surface->wl_surface = NULL;
 	}
 	// Free pixels only after the surface stops referencing the buffer
-	sweetbg_buffer_destroy(&surface->buffer);
+	free_buffer(surface->buffer);
+	surface->buffer = NULL;
+	while (surface->retired_buffers != NULL) {
+		struct sweetbg_buffer *buffer = surface->retired_buffers;
+		surface->retired_buffers = buffer->next;
+		free_buffer(buffer);
+	}
 	surface->configured = false;
 }

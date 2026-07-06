@@ -11,7 +11,7 @@ static void handle_release(void *data, struct wl_buffer *wl_buffer) {
 	struct sweetbg_buffer *buffer = data;
 	(void)wl_buffer;
 
-	sweetbg_buffer_destroy(buffer);
+	buffer->released = true;
 }
 
 static const struct wl_buffer_listener buffer_listener = {
@@ -42,6 +42,8 @@ bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 	buffer->size = 0;
 	buffer->width = width;
 	buffer->height = height;
+	buffer->released = false;
+	buffer->next = NULL;
 
 	uint32_t stride;
 	size_t size;
@@ -96,6 +98,8 @@ bool sweetbg_buffer_from_fd(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 	buffer->size = 0;
 	buffer->width = width;
 	buffer->height = height;
+	buffer->released = false;
+	buffer->next = NULL;
 
 	uint32_t stride;
 	size_t size;
@@ -143,4 +147,5 @@ void sweetbg_buffer_destroy(struct sweetbg_buffer *buffer) {
 		buffer->data = NULL;
 	}
 	buffer->size = 0;
+	buffer->released = true;
 }

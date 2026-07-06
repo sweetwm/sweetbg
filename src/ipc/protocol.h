@@ -18,6 +18,7 @@ enum sweetbg_ipc_command {
 	SWEETBG_CMD_SET = 6,
 	SWEETBG_CMD_CLEAR = 7,
 	SWEETBG_CMD_QUERY_JSON = 8,
+	SWEETBG_CMD_RELOAD = 9,
 };
 
 enum sweetbg_set_field {

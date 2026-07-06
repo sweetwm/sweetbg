@@ -2,13 +2,6 @@
 
 Sweetbg is a small, lightweight and static Wayland wallpaper daemon
 
-Binaries:
-
-- `sweetbgd`: daemon
-- `sweetbg`: command-line client
-
-Supported image formats: JPEG, PNG, and WebP.
-
 ## Install
 
 Arch Linux AUR packages:
@@ -35,6 +28,8 @@ Dependencies:
 - `scdoc` for man pages
 - `systemd` for the optional user service
 
+Binaries: `sweetbgd`: daemon, `sweetbg`: command-line client
+
 ## Usage
 
 Start the daemon:
@@ -59,6 +54,7 @@ sweetbg clear
 sweetbg query
 sweetbg query --json
 sweetbg doctor
+sweetbg reload
 sweetbg stop
 ```
 
@@ -90,8 +86,8 @@ image = "/home/me/Pictures/left.jpg"
 fit = "contain"
 ```
 
-Runtime changes are temporary unless you pass `--persist` or `-p`. There is no config
-hot reload; restart `sweetbgd` after manual config edits.
+Runtime changes are temporary unless you pass `--persist` or `-p`. There is no
+config hot reload; run `sweetbg reload` after manual config edits.
 
 ## Autostart
 
@@ -116,10 +112,8 @@ sweets.exec_once("sweetbgd")
 ```
 
 ## Notes
-
-- Sweetbg is Wayland-only and requires `zwlr_layer_shell_v1`.
+- Supported image formats: JPEG, PNG, and WebP
+- Sweetbg is Wayland-only and requires `zwlr_layer_shell_v1`
 - Fractional scaling is sharper when the compositor supports `wp_viewporter`
-  and `wp_fractional_scale_v1`.
-- The IPC socket is `$XDG_RUNTIME_DIR/sweetbg.sock`.
-- See the man pages for full command details: `sweetbg(1)`, `sweetbgd(1)`,
-  and `sweetbg(5)`.
+  and `wp_fractional_scale_v1`
+- The IPC socket is `$XDG_RUNTIME_DIR/sweetbg.sock`

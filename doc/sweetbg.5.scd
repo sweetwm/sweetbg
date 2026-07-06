@@ -7,8 +7,8 @@ sweetbg - configuration file for the sweetbg wallpaper daemon
 # DESCRIPTION
 
 *sweetbgd*(1) reads _$XDG_CONFIG_HOME/sweetbg/config.toml_, falling back to
-_~/.config/sweetbg/config.toml_. The file is read once at startup; there is no
-hot reload, so restart the daemon to apply edits.
+_~/.config/sweetbg/config.toml_. The file is read at startup and when
+*sweetbg reload* is run. There is no automatic hot reload.
 
 A missing file uses safe defaults. A malformed file is reported with its path
 and line number, and the daemon continues with defaults rather than failing to

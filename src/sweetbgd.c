@@ -42,6 +42,8 @@ struct daemon {
 static volatile sig_atomic_t g_running = 1;
 
 static void compact_assignments(struct daemon *daemon);
+static bool load_config(
+	struct daemon *daemon, bool strict, char *message, size_t message_size);
 
 static void handle_signal(int signal_number) {
 	(void)signal_number;
@@ -693,6 +695,18 @@ static void mark_all_repaint(struct daemon *daemon) {
 	}
 }
 
+static uint8_t handle_reload(
+	struct daemon *daemon, char *message, size_t message_size) {
+	if (!load_config(daemon, true, message, message_size)) {
+		return SWEETBG_STATUS_ERR_BAD_REQUEST;
+	}
+
+	mark_all_repaint(daemon);
+	reconcile_paint(daemon);
+	snprintf(message, message_size, "reloaded config");
+	return SWEETBG_STATUS_OK;
+}
+
 static void clear_message(
 	const struct clear_request *req, char *message, size_t message_size) {
 	const bool image = (req->flags & SWEETBG_CLEAR_IMAGE) != 0;
@@ -825,6 +839,8 @@ static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 	case SWEETBG_CMD_CLEAR:
 		return handle_clear(
 			daemon, payload, len, message, message_size);
+	case SWEETBG_CMD_RELOAD:
+		return handle_reload(daemon, message, message_size);
 	default:
 		snprintf(message, message_size, "unknown command");
 		return SWEETBG_STATUS_ERR_UNKNOWN_COMMAND;
@@ -901,27 +917,50 @@ static void report_outputs(struct sweetbg_registry *reg) {
 	}
 }
 
-static void apply_config(struct daemon *daemon) {
-	struct sweetbg_config cfg;
-	char err[256];
-	if (!sweetbg_config_load(&cfg, err, sizeof(err))) {
-		fprintf(stderr, "sweetbgd: %s\n", err);
+static bool check_image_path(
+	const char *path, char *message, size_t message_size) {
+	if (path[0] == '\0' || access(path, R_OK) == 0) {
+		return true;
 	}
-	daemon->color = cfg.color;
-	daemon->fit = cfg.fit;
+	snprintf(message, message_size, "configured image %s: %s", path,
+		strerror(errno));
+	return false;
+}
 
-	if (cfg.image[0] != '\0') {
-		if (access(cfg.image, R_OK) == 0) {
-			memcpy(daemon->default_path, cfg.image,
-				strlen(cfg.image) + 1);
+static bool validate_config_images(
+	const struct sweetbg_config *cfg, char *message, size_t message_size) {
+	if (!check_image_path(cfg->image, message, message_size)) {
+		return false;
+	}
+	for (size_t i = 0; i < cfg->output_count; i++) {
+		const struct sweetbg_config_output *out = &cfg->outputs[i];
+		if (out->has_image &&
+			!check_image_path(out->image, message, message_size)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static void apply_loaded_config(
+	struct daemon *daemon, const struct sweetbg_config *cfg) {
+	daemon->color = cfg->color;
+	daemon->fit = cfg->fit;
+	daemon->default_path[0] = '\0';
+	daemon->assignment_count = 0;
+
+	if (cfg->image[0] != '\0') {
+		if (access(cfg->image, R_OK) == 0) {
+			memcpy(daemon->default_path, cfg->image,
+				strlen(cfg->image) + 1);
 		} else {
 			fprintf(stderr, "sweetbgd: configured image %s: %s\n",
-				cfg.image, strerror(errno));
+				cfg->image, strerror(errno));
 		}
 	}
 
-	for (size_t i = 0; i < cfg.output_count; i++) {
-		const struct sweetbg_config_output *out = &cfg.outputs[i];
+	for (size_t i = 0; i < cfg->output_count; i++) {
+		const struct sweetbg_config_output *out = &cfg->outputs[i];
 		if (out->has_fit) {
 			set_fit_assignment(daemon, out->name, out->fit);
 		}
@@ -938,6 +977,25 @@ static void apply_config(struct daemon *daemon) {
 			}
 		}
 	}
+}
+
+static bool load_config(struct daemon *daemon, bool strict, char *message,
+	size_t message_size) {
+	struct sweetbg_config cfg;
+	char err[256];
+	if (!sweetbg_config_load(&cfg, err, sizeof(err))) {
+		if (strict) {
+			snprintf(message, message_size, "%s", err);
+			return false;
+		} else {
+			fprintf(stderr, "sweetbgd: %s\n", err);
+		}
+	}
+	if (strict && !validate_config_images(&cfg, message, message_size)) {
+		return false;
+	}
+	apply_loaded_config(daemon, &cfg);
+	return true;
 }
 
 static bool serve(struct wl_display *display, struct sweetbg_ipc_server *ipc) {
@@ -962,7 +1020,8 @@ static bool serve(struct wl_display *display, struct sweetbg_ipc_server *ipc) {
 		.reg = &reg,
 		.default_path = {0},
 	};
-	apply_config(&daemon);
+	char err[256];
+	load_config(&daemon, false, err, sizeof(err));
 
 	// The initial configures flagged each surface; paint config image/color
 	reconcile_paint(&daemon);

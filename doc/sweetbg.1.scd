@@ -86,6 +86,12 @@ parses arguments, sends one request, prints the response, and returns.
 	command fail; configuration errors, invalid runtime paths, socket
 	ownership problems, or an unreachable daemon return a failure status.
 
+*reload*
+	Ask the running daemon to reread *sweetbg*(5) once and repaint outputs from
+	the new configuration. This is an explicit command, not automatic hot
+	reload. If the config is malformed or names an unreadable image, the daemon
+	keeps the current wallpaper state and reports an error.
+
 *stop*
 	Ask the running daemon to exit.
 

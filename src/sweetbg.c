@@ -382,6 +382,7 @@ static void usage(FILE *out) {
 	      "  query --json               print daemon status as JSON\n"
 	      "  doctor                     check setup and daemon "
 	      "reachability\n"
+	      "  reload                     reread config.toml once\n"
 	      "  stop                       stop the running daemon\n"
 	      "\n"
 	      "img/set/clear options:\n"
@@ -417,6 +418,10 @@ int main(int argc, char **argv) {
 
 	if (strcmp(cmd, "stop") == 0) {
 		return sweetbg_client_request(SWEETBG_CMD_STOP, NULL, 0);
+	}
+
+	if (strcmp(cmd, "reload") == 0) {
+		return sweetbg_client_request(SWEETBG_CMD_RELOAD, NULL, 0);
 	}
 
 	if (strcmp(cmd, "img") == 0) {

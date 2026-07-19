@@ -1,0 +1,84 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label for a manual packaging test build"
+        required: false
+        default: "manual"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PACMAN_DEPS: >-
+    base-devel git meson ninja pkgconf clang
+    wayland wayland-protocols libpng libjpeg-turbo libwebp scdoc
+
+jobs:
+  release:
+    name: Build and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          # shellcheck disable=SC2086
+          pacman -Syu --noconfirm --needed $PACMAN_DEPS
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${version}" >>"$GITHUB_OUTPUT"
+
+      - name: Configure release build
+        run: meson setup build-release --prefix /usr --werror -Dbuildtype=release
+
+      - name: Build
+        run: ninja -C build-release
+
+      - name: Stage install tree
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dist="sweetbg-${{ steps.version.outputs.version }}-x86_64-linux"
+          DESTDIR="${PWD}/dist/${dist}" meson install -C build-release
+          install -m644 README.md "dist/${dist}/README.md"
+          install -m644 LICENSE "dist/${dist}/LICENSE"
+          tar -C dist -czf "dist/${dist}.tar.gz" "${dist}"
+
+      - name: Upload release assets
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v3
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: |
+            dist/sweetbg-*-x86_64-linux.tar.gz
+
+      - name: Upload manual build artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sweetbg-release-preview
+          path: dist/sweetbg-*-x86_64-linux.tar.gz

@@ -2,6 +2,13 @@
 
 Sweetbg is a small, lightweight and static Wayland wallpaper daemon
 
+<a href="https://github.com/user-attachments/assets/1af9d909-ac15-4d44-8280-b08ac0857bb2" target="_blank">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/1af9d909-ac15-4d44-8280-b08ac0857bb2" />
+    <img alt="veila-preview2" src="https://github.com/user-attachments/assets/1af9d909-ac15-4d44-8280-b08ac0857bb2" />
+  </picture>
+</a>
+
 ## Install
 
 Arch Linux AUR packages:

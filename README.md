@@ -38,30 +38,56 @@ Start the daemon:
 sweetbgd
 ```
 
+With systemd user services:
+
+```sh
+systemctl --user enable --now sweetbgd.service
+```
+
+If your session does not export Wayland variables to systemd, import them from
+your compositor startup:
+
+```sh
+systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
+```
+
 Set and manage wallpapers:
 
 ```sh
+# Set the wallpaper on every output
 sweetbg img ~/Pictures/wall.jpg
+# Same, but also save it to the config so it comes back next start (--persist or -p)
 sweetbg img ~/Pictures/wall.jpg --persist
+# Give each output its own wallpaper
 sweetbg img DP-1=~/left.jpg HDMI-A-1=~/right.jpg
+# Set the wallpaper on one output only (--output or -o)
 sweetbg img ~/Pictures/side.jpg --output DP-1
 
+# Change how the image fills every output
 sweetbg set fit cover
+# Change the fit mode for one output only (--output or -o)
 sweetbg set fit contain --output DP-1
+# Set the background color (--persist or -p)
 sweetbg set color "#1e1e2e" --persist
 
+# Drop the wallpapers and go back to the background color
 sweetbg clear
+# Show the current wallpaper, fit mode, and connected outputs
 sweetbg query
+# Same, as JSON for scripts
 sweetbg query --json
+# Check the session, config, socket, and daemon when something is wrong
 sweetbg doctor
+# Reread the config after editing it
 sweetbg reload
+# Shut the daemon down
 sweetbg stop
 ```
 
 Output names come from `sweetbg query`. Fit modes are `cover`, `contain`,
 `center`, and `tile`.
 
-Use `sweetbg doctor` to check the session environment, config file, socket, and
+Use `sweetbg doctor` to check the session environment, config file, socket and
 daemon reachability when Sweetbg does not start or a client command cannot
 connect.
 
@@ -87,29 +113,7 @@ fit = "contain"
 ```
 
 Runtime changes are temporary unless you pass `--persist` or `-p`. There is no
-config hot reload; run `sweetbg reload` after manual config edits.
-
-## Autostart
-
-With systemd user services:
-
-```sh
-systemctl --user enable --now sweetbgd.service
-```
-
-If your session does not export Wayland variables to systemd, import them from
-your compositor startup:
-
-```sh
-systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
-```
-
-Without systemd, start the daemon from your compositor config:
-
-```sh
-# Sweets
-sweets.exec_once("sweetbgd")
-```
+config hot reload, run `sweetbg reload` after manual config edits.
 
 ## Notes
 - Supported image formats: JPEG, PNG, and WebP

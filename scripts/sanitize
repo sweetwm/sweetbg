@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-cd "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 
 if [ -d build-asan ]; then
 	meson setup --reconfigure build-asan --werror -Db_sanitize=address,undefined

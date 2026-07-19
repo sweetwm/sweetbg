@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-cd "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 
 if ! command -v valgrind >/dev/null 2>&1; then
 	printf 'valgrind not found; install it and rerun this script.\n' >&2

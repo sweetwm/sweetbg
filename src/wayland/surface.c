@@ -186,6 +186,7 @@ bool sweetbg_surface_paint_color(struct sweetbg_surface *surface,
 		return false;
 	}
 	sweetbg_buffer_fill(surface->buffer, color);
+	sweetbg_buffer_unmap(surface->buffer);
 	present(surface, scale, pw, ph);
 	return true;
 }
@@ -247,6 +248,14 @@ static void retire_buffer(struct sweetbg_surface *surface) {
 		surface->retired_buffers = surface->buffer;
 	}
 	surface->buffer = NULL;
+}
+
+void sweetbg_surface_collect(struct sweetbg_surface *surface) {
+	collect_retired_buffers(surface);
+	if (surface->buffer != NULL && surface->buffer->released) {
+		free_buffer(surface->buffer);
+		surface->buffer = NULL;
+	}
 }
 
 void sweetbg_surface_destroy(struct sweetbg_surface *surface) {

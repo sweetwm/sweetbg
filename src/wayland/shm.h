@@ -29,6 +29,8 @@ bool sweetbg_buffer_from_fd(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 // Fill every pixel with one XRGB8888 color (0x00RRGGBB)
 void sweetbg_buffer_fill(struct sweetbg_buffer *buffer, uint32_t color);
 
+void sweetbg_buffer_unmap(struct sweetbg_buffer *buffer);
+
 // Unmap the pixels and destroy the wl_buffer. Idempotent
 void sweetbg_buffer_destroy(struct sweetbg_buffer *buffer);
 

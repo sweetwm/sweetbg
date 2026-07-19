@@ -66,13 +66,7 @@ bool sweetbg_ipc_write_full(int fd, const void *buf, size_t n) {
 	return true;
 }
 
-bool sweetbg_ipc_send_frame(
-	int fd, uint8_t type, const void *payload, uint32_t len) {
-	if (len > SWEETBG_IPC_MAX_PAYLOAD) {
-		return false;
-	}
-
-	uint8_t header[SWEETBG_IPC_HEADER_SIZE];
+static void fill_header(uint8_t *header, uint8_t type, uint32_t len) {
 	header[0] = SWEETBG_IPC_VERSION;
 	header[1] = type;
 	header[2] = 0;
@@ -81,6 +75,16 @@ bool sweetbg_ipc_send_frame(
 	header[5] = (uint8_t)((len >> 8) & 0xff);
 	header[6] = (uint8_t)((len >> 16) & 0xff);
 	header[7] = (uint8_t)((len >> 24) & 0xff);
+}
+
+bool sweetbg_ipc_send_frame(
+	int fd, uint8_t type, const void *payload, uint32_t len) {
+	if (len > SWEETBG_IPC_MAX_PAYLOAD) {
+		return false;
+	}
+
+	uint8_t header[SWEETBG_IPC_HEADER_SIZE];
+	fill_header(header, type, len);
 
 	if (!sweetbg_ipc_write_full(fd, header, sizeof(header))) {
 		return false;
@@ -114,17 +118,6 @@ bool sweetbg_ipc_recv_frame(
 	*type = header[1];
 	*len = plen;
 	return true;
-}
-
-static void fill_header(uint8_t *header, uint8_t type, uint32_t len) {
-	header[0] = SWEETBG_IPC_VERSION;
-	header[1] = type;
-	header[2] = 0;
-	header[3] = 0;
-	header[4] = (uint8_t)(len & 0xff);
-	header[5] = (uint8_t)((len >> 8) & 0xff);
-	header[6] = (uint8_t)((len >> 16) & 0xff);
-	header[7] = (uint8_t)((len >> 24) & 0xff);
 }
 
 bool sweetbg_ipc_send_frame_fd(
@@ -197,7 +190,7 @@ bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
 
 	ssize_t got;
 	do {
-		got = recvmsg(fd, &msg, 0);
+		got = recvmsg(fd, &msg, MSG_CMSG_CLOEXEC);
 	} while (got < 0 && errno == EINTR);
 	if (got <= 0) {
 		return false;

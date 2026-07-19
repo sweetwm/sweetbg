@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/signalfd.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <wayland-client.h>
@@ -39,15 +40,14 @@ struct daemon {
 	size_t assignment_count;
 };
 
-static volatile sig_atomic_t g_running = 1;
-
 static void compact_assignments(struct daemon *daemon);
 static bool load_config(
 	struct daemon *daemon, bool strict, char *message, size_t message_size);
 
-static void handle_signal(int signal_number) {
-	(void)signal_number;
-	g_running = 0;
+static void term_signal_set(sigset_t *mask) {
+	sigemptyset(mask);
+	sigaddset(mask, SIGINT);
+	sigaddset(mask, SIGTERM);
 }
 
 static struct assignment *assignment_for(
@@ -177,6 +177,13 @@ static bool clear_fit_assignments(struct daemon *daemon) {
 	return changed;
 }
 
+static void collect_buffers(struct sweetbg_registry *reg) {
+	struct sweetbg_output *output;
+	wl_list_for_each(output, &reg->outputs, link) {
+		sweetbg_surface_collect(&output->surface);
+	}
+}
+
 static bool ensure_surfaces(struct sweetbg_registry *reg) {
 	struct sweetbg_output *output;
 	wl_list_for_each(output, &reg->outputs, link) {
@@ -241,6 +248,9 @@ static void spawn_prepare(const char *name, const char *path) {
 		return;
 	}
 	if (pid == 0) {
+		sigset_t mask;
+		term_signal_set(&mask);
+		sigprocmask(SIG_UNBLOCK, &mask, NULL);
 		char bin[PATH_MAX];
 		client_binary(bin, sizeof(bin));
 		execlp(bin, "sweetbg", "prepare", name, path, (char *)NULL);
@@ -313,7 +323,8 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	const uint8_t *payload, uint32_t len, int fd, char *message,
 	size_t message_size) {
 	struct prepared_request req;
-	if (fd < 0 || !parse_prepared(payload, len, &req)) {
+	if (fd < 0 || !parse_prepared(payload, len, &req) ||
+		req.mode > SWEETBG_IMG_REPAINT) {
 		snprintf(message, message_size, "invalid prepared image");
 		return SWEETBG_STATUS_ERR_BAD_REQUEST;
 	}
@@ -331,9 +342,26 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 		snprintf(message, message_size, "no output named %s", req.name);
 		return SWEETBG_STATUS_ERR_BAD_REQUEST;
 	}
+	if (!match->surface.configured) {
+		snprintf(message, message_size, "output %s is not configured",
+			req.name);
+		return SWEETBG_STATUS_ERR_IMAGE;
+	}
+
+	uint32_t want_width;
+	uint32_t want_height;
+	sweetbg_surface_buffer_size(
+		&match->surface, match->scale, &want_width, &want_height);
+	if (req.width != want_width || req.height != want_height) {
+		snprintf(message, message_size,
+			"stale prepare for %s: got %ux%u, output wants %ux%u",
+			req.name, req.width, req.height, want_width,
+			want_height);
+		return SWEETBG_STATUS_ERR_IMAGE;
+	}
 
 	if (!sweetbg_surface_attach_prepared(&match->surface, daemon->reg->shm,
-		    req.scale, fd, req.width, req.height)) {
+		    match->scale, fd, req.width, req.height)) {
 		snprintf(message, message_size, "could not attach buffer");
 		return SWEETBG_STATUS_ERR_IMAGE;
 	}
@@ -847,35 +875,46 @@ static uint8_t dispatch(void *data, uint8_t command, const uint8_t *payload,
 	}
 }
 
-static void install_signal_handlers(void) {
-	struct sigaction sa;
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_handler = handle_signal;
-	sigaction(SIGINT, &sa, NULL);
-	sigaction(SIGTERM, &sa, NULL);
-
-	// Auto-reap the short-lived `sweetbg prepare` children we spawn
+static int install_signal_handling(void) {
 	struct sigaction chld;
 	memset(&chld, 0, sizeof(chld));
 	chld.sa_handler = SIG_IGN;
 	sigaction(SIGCHLD, &chld, NULL);
+
+	sigset_t mask;
+	term_signal_set(&mask);
+	if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
+		fprintf(stderr, "sweetbgd: cannot block signals: %s\n",
+			strerror(errno));
+		return -1;
+	}
+	int fd = signalfd(-1, &mask, SFD_CLOEXEC | SFD_NONBLOCK);
+	if (fd < 0) {
+		fprintf(stderr, "sweetbgd: cannot create signalfd: %s\n",
+			strerror(errno));
+	}
+	return fd;
 }
 
-static void run_loop(struct daemon *daemon, struct sweetbg_ipc_server *ipc) {
+static void run_loop(
+	struct daemon *daemon, struct sweetbg_ipc_server *ipc, int signal_fd) {
 	struct wl_display *display = daemon->display;
-	struct pollfd fds[2];
+	struct pollfd fds[3];
 	fds[0].fd = wl_display_get_fd(display);
 	fds[0].events = POLLIN;
 	fds[1].fd = ipc->fd;
 	fds[1].events = POLLIN;
+	fds[2].fd = signal_fd;
+	fds[2].events = POLLIN;
 
-	while (g_running) {
+	bool running = true;
+	while (running) {
 		while (wl_display_prepare_read(display) != 0) {
 			wl_display_dispatch_pending(display);
 		}
 		wl_display_flush(display);
 
-		if (poll(fds, 2, -1) < 0) {
+		if (poll(fds, 3, -1) < 0) {
 			wl_display_cancel_read(display);
 			if (errno == EINTR) {
 				continue;
@@ -884,22 +923,37 @@ static void run_loop(struct daemon *daemon, struct sweetbg_ipc_server *ipc) {
 		}
 
 		if ((fds[0].revents & POLLIN) != 0) {
-			wl_display_read_events(display);
+			if (wl_display_read_events(display) < 0) {
+				break;
+			}
 		} else {
 			wl_display_cancel_read(display);
 		}
 		if (wl_display_dispatch_pending(display) < 0) {
 			break;
 		}
+		short bad = POLLERR | POLLHUP | POLLNVAL;
+		if ((fds[0].revents & bad) != 0 ||
+			(fds[1].revents & bad) != 0) {
+			break;
+		}
+
+		if ((fds[2].revents & POLLIN) != 0) {
+			struct signalfd_siginfo info;
+			ssize_t n = read(signal_fd, &info, sizeof(info));
+			(void)n;
+			break;
+		}
 
 		ensure_surfaces(daemon->reg);
 		reconcile_paint(daemon);
+		collect_buffers(daemon->reg);
 
 		if ((fds[1].revents & POLLIN) != 0) {
 			bool stop = false;
 			sweetbg_ipc_server_handle(ipc, dispatch, daemon, &stop);
 			if (stop) {
-				g_running = 0;
+				running = false;
 			}
 		}
 	}
@@ -998,7 +1052,8 @@ static bool load_config(struct daemon *daemon, bool strict, char *message,
 	return true;
 }
 
-static bool serve(struct wl_display *display, struct sweetbg_ipc_server *ipc) {
+static bool serve(struct wl_display *display, struct sweetbg_ipc_server *ipc,
+	int signal_fd) {
 	struct sweetbg_registry reg;
 	if (!sweetbg_registry_init(&reg, display)) {
 		return false;
@@ -1030,7 +1085,7 @@ static bool serve(struct wl_display *display, struct sweetbg_ipc_server *ipc) {
 		return false;
 	}
 
-	run_loop(&daemon, ipc);
+	run_loop(&daemon, ipc, signal_fd);
 	sweetbg_registry_finish(&reg);
 	return true;
 }
@@ -1050,9 +1105,15 @@ static int run(void) {
 		return 1;
 	}
 
-	install_signal_handlers();
-	bool ok = serve(display, &ipc);
+	int signal_fd = install_signal_handling();
+	if (signal_fd < 0) {
+		wl_display_disconnect(display);
+		sweetbg_ipc_server_finish(&ipc);
+		return 1;
+	}
+	bool ok = serve(display, &ipc, signal_fd);
 
+	close(signal_fd);
 	wl_display_disconnect(display);
 	sweetbg_ipc_server_finish(&ipc);
 	return ok ? 0 : 1;

@@ -22,6 +22,17 @@ wayland_protos = dependency('wayland-protocols')
 libpng = dependency('libpng')
 libjpeg = dependency('libjpeg')
 libwebp = dependency('libwebp')
+
+# jpeg.c decodes straight into JCS_EXT_BGRX, a libjpeg-turbo extension
+cc = meson.get_compiler('c')
+if not cc.has_header_symbol(
+	'jpeglib.h',
+	'JCS_EXT_BGRX',
+	prefix: '#include <stdio.h>',
+	dependencies: libjpeg,
+)
+	error('libjpeg-turbo is required: jpeglib.h does not define JCS_EXT_BGRX')
+endif
 wayland_scanner_dep = dependency('wayland-scanner', native: true)
 wayland_scanner = find_program(
 	wayland_scanner_dep.get_variable('wayland_scanner'),

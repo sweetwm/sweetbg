@@ -46,6 +46,8 @@ bool sweetbg_surface_attach_prepared(struct sweetbg_surface *surface,
 	struct wl_shm *shm, int32_t scale, int fd, uint32_t width,
 	uint32_t height);
 
+void sweetbg_surface_collect(struct sweetbg_surface *surface);
+
 void sweetbg_surface_destroy(struct sweetbg_surface *surface);
 
 #endif

@@ -137,6 +137,13 @@ void sweetbg_buffer_fill(struct sweetbg_buffer *buffer, uint32_t color) {
 	}
 }
 
+void sweetbg_buffer_unmap(struct sweetbg_buffer *buffer) {
+	if (buffer->data != NULL) {
+		munmap(buffer->data, buffer->size);
+		buffer->data = NULL;
+	}
+}
+
 void sweetbg_buffer_destroy(struct sweetbg_buffer *buffer) {
 	if (buffer->wl_buffer != NULL) {
 		wl_buffer_destroy(buffer->wl_buffer);

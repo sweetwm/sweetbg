@@ -31,7 +31,7 @@ bool sweetbg_decode_png(
 		return false;
 	}
 
-	png_bytep *rows = NULL;
+	png_bytep *volatile rows = NULL;
 	if (setjmp(png_jmpbuf(png))) {
 		// libpng longjmps here on any error during the calls below
 		free((void *)rows);

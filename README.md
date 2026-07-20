@@ -22,7 +22,7 @@ yay -S sweetbg-git
 Build from source:
 
 ```sh
-meson setup build
+meson setup build --buildtype=release
 ninja -C build
 sudo ninja -C build install
 ```

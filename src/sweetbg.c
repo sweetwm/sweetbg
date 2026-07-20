@@ -4,10 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "config/config.h"
 #include "config/config_write.h"
 #include "doctor/doctor.h"
+#include "image/pick.h"
 #include "ipc/client.h"
 #include "ipc/protocol.h"
 
@@ -24,6 +26,21 @@ static int cmd_img(const char *arg, const char *output, bool persist) {
 			strerror(errno));
 		return 1;
 	}
+
+	// A directory is resolved to one file here and never travels further,
+	// so what the daemon stores and what --persist writes stay a real image
+	struct stat st;
+	if (stat(resolved, &st) == 0 && S_ISDIR(st.st_mode)) {
+		char picked[PATH_MAX];
+		char err[256];
+		if (!sweetbg_pick_random_image(resolved, picked, sizeof(picked),
+			    err, sizeof(err))) {
+			fprintf(stderr, "sweetbg: %s\n", err);
+			return 1;
+		}
+		memcpy(resolved, picked, strlen(picked) + 1);
+	}
+
 	if (output != NULL && !valid_output_arg(output)) {
 		fprintf(stderr, "sweetbg: invalid --output name\n");
 		return 2;

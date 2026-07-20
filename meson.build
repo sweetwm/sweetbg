@@ -59,6 +59,7 @@ executable(
 	'src/image/image.c',
 	'src/image/fit.c',
 	'src/image/layout.c',
+	'src/image/pick.c',
 	'src/image/png.c',
 	'src/image/jpeg.c',
 	'src/image/webp.c',

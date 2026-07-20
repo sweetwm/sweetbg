@@ -31,6 +31,12 @@ These top-level keys set the defaults applied to every output:
 	Absolute path to the default wallpaper (JPEG, PNG, or WebP). When unset,
 	the placeholder color is shown until an image is set with *sweetbg*(1).
 
+	This must be a file. Unlike *sweetbg img*, which accepts a directory and
+	picks a random image from it, the daemon never resolves a directory: one
+	here is rejected as an unsupported image format and the placeholder color
+	is shown. Use *sweetbg img* <dir> *--persist* to record a random choice,
+	which writes the chosen file.
+
 *color*
 	Background color, as _"#rrggbb"_. Shown before an image is set, and behind
 	the image where the _contain_ and _center_ fit modes do not cover the

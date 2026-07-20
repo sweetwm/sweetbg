@@ -67,6 +67,9 @@ sweetbg img ~/Pictures/wall.jpg
 # Same, but also save it to the config so it comes back next start (--persist or -p)
 sweetbg img ~/Pictures/wall.jpg --persist
 
+# Pass a directory to pick a random image from it
+sweetbg img ~/Pictures/Wallpapers/
+
 # Give each output its own wallpaper
 sweetbg img DP-1=~/left.jpg HDMI-A-1=~/right.jpg
 
@@ -102,7 +105,26 @@ sweetbg stop
 ```
 
 Output names come from `sweetbg query`. Fit modes are `cover`, `contain`,
-`center`, `tile`, and `span`.
+`center`, `tile`, and `span`. See [`sweetbg(1)`](doc/sweetbg.1.scd) for the full
+command reference.
+
+Use `sweetbg doctor` to check the session environment, config file, socket and
+daemon reachability when Sweetbg does not start or a client command cannot
+connect.
+
+### Random wallpapers
+
+Pass a directory to `sweetbg img` to pick a random image from it. The choice is
+made once, so redrawing an output never re-rolls it. There is no built-in timer;
+rotate with a systemd user timer:
+
+```sh
+# rotate every 30 minutes
+systemd-run --user --on-active=30m --on-unit-active=30m \
+  sweetbg img ~/Pictures/Wallpapers/
+```
+
+### Spanning outputs
 
 `span` stretches a single image across the whole monitor layout. It cannot be
 set for a single output with `--output` or in an `[output.NAME]` config
@@ -112,10 +134,6 @@ section.
 sweetbg set fit span
 sweetbg img ~/Pictures/ultrawide.jpg
 ```
-
-Use `sweetbg doctor` to check the session environment, config file, socket and
-daemon reachability when Sweetbg does not start or a client command cannot
-connect.
 
 ## Configuration
 
@@ -138,10 +156,22 @@ image = "/home/me/Pictures/left.jpg"
 fit = "contain"
 ```
 
-[Config example](https://github.com/sweetwm/sweetbg/blob/master/config/example.toml)
+[Config example](config/example.toml)
 
 Runtime changes are temporary unless you pass `--persist` or `-p`. There is no
-config hot reload, run `sweetbg reload` after manual config edits.
+config hot reload, run `sweetbg reload` after manual config edits. Every key is
+documented in [`sweetbg(5)`](doc/sweetbg.5.scd).
+
+## Documentation
+
+The man pages are the full reference:
+
+- [`sweetbg(1)`](doc/sweetbg.1.scd) — client commands, options, and fit modes
+- [`sweetbgd(1)`](doc/sweetbgd.1.scd) — daemon and its environment
+- [`sweetbg(5)`](doc/sweetbg.5.scd) — every config key
+
+Once installed, read them with `man sweetbg`, `man sweetbgd`, and
+`man 5 sweetbg`.
 
 ## Notes
 - Supported image formats: JPEG, PNG, and WebP

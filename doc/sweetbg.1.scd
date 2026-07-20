@@ -21,6 +21,18 @@ parses arguments, sends one request, prints the response, and returns.
 	output, including outputs connected later, clearing any per-output image
 	overrides. Paths are resolved to absolute paths before being sent.
 
+	If <path> is a directory, one image inside it is chosen at random and
+	used. The scan is not recursive, ignores hidden files, and considers only
+	_.jpg_, _.jpeg_, _.png_, and _.webp_ names. The client resolves the
+	directory once and sends the chosen file, so the daemon stores a real
+	image: redrawing an output later (hotplug, scale or geometry change)
+	reuses that file instead of picking again. With *--persist* the chosen
+	file is written to the config, not the directory. The <name>=<path> and
+	*--output* forms accept a directory too, each resolved independently.
+
+	Sweetbg has no wallpaper timer; run the command again (for example from a
+	systemd user timer) to rotate.
+
 *img* <name>=<path> [<name>=<path> ...]
 	Set a different wallpaper per output in one command. Each <name> is an
 	output name from *query* (for example _DP-1_); each is set as that

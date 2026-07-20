@@ -16,5 +16,5 @@ if meson test -C build-asan --list >/dev/null 2>&1; then
 	UBSAN_OPTIONS=${UBSAN_OPTIONS:-print_stacktrace=1} \
 	meson test -C build-asan --print-errorlogs
 else
-	printf 'No tests defined yet; skipping.\n'
+	printf 'No tests present (tests/ is local-only); skipping.\n'
 fi

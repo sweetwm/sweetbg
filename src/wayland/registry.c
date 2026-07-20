@@ -8,15 +8,27 @@
 #include "viewporter-client-protocol.h"
 #include "wayland/output.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+#include "xdg-output-unstable-v1-client-protocol.h"
 
 #define COMPOSITOR_MAX_VERSION 4
 #define LAYER_SHELL_MAX_VERSION 4
 #define SHM_VERSION 1
 #define VIEWPORTER_VERSION 1
 #define FRACTIONAL_SCALE_VERSION 1
+#define XDG_OUTPUT_MANAGER_MAX_VERSION 3
 
 static uint32_t min_u32(uint32_t a, uint32_t b) {
 	return a < b ? a : b;
+}
+
+static void attach_xdg_outputs(struct sweetbg_registry *reg) {
+	if (reg->xdg_output_manager == NULL) {
+		return;
+	}
+	struct sweetbg_output *output;
+	wl_list_for_each(output, &reg->outputs, link) {
+		sweetbg_output_attach_xdg(output, reg->xdg_output_manager);
+	}
 }
 
 static void handle_global(void *data, struct wl_registry *registry,
@@ -43,8 +55,17 @@ static void handle_global(void *data, struct wl_registry *registry,
 		reg->fractional_scale_manager = wl_registry_bind(registry, name,
 			&wp_fractional_scale_manager_v1_interface,
 			FRACTIONAL_SCALE_VERSION);
+	} else if (strcmp(interface, zxdg_output_manager_v1_interface.name) ==
+		   0) {
+		reg->xdg_output_manager = wl_registry_bind(registry, name,
+			&zxdg_output_manager_v1_interface,
+			min_u32(version, XDG_OUTPUT_MANAGER_MAX_VERSION));
 	} else if (strcmp(interface, wl_output_interface.name) == 0) {
-		sweetbg_output_create(&reg->outputs, registry, name, version);
+		if (sweetbg_output_create(
+			    &reg->outputs, registry, name, version)) {
+			reg->layout_dirty = true;
+			attach_xdg_outputs(reg);
+		}
 	}
 }
 
@@ -52,7 +73,9 @@ static void handle_global_remove(
 	void *data, struct wl_registry *registry, uint32_t name) {
 	struct sweetbg_registry *reg = data;
 	(void)registry;
-	sweetbg_output_remove(&reg->outputs, name);
+	if (sweetbg_output_remove(&reg->outputs, name)) {
+		reg->layout_dirty = true;
+	}
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -68,6 +91,8 @@ bool sweetbg_registry_init(
 	reg->layer_shell = NULL;
 	reg->viewporter = NULL;
 	reg->fractional_scale_manager = NULL;
+	reg->xdg_output_manager = NULL;
+	reg->layout_dirty = false;
 	wl_list_init(&reg->outputs);
 
 	reg->registry = wl_display_get_registry(display);
@@ -79,11 +104,12 @@ bool sweetbg_registry_init(
 
 	wl_registry_add_listener(reg->registry, &registry_listener, reg);
 
-	// One roundtrip is enough to receive every global the server advertises
 	if (wl_display_roundtrip(display) < 0) {
 		fprintf(stderr, "sweetbgd: wayland roundtrip failed\n");
 		return false;
 	}
+
+	attach_xdg_outputs(reg);
 
 	bool ok = true;
 	if (reg->compositor == NULL) {

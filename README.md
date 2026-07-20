@@ -102,7 +102,16 @@ sweetbg stop
 ```
 
 Output names come from `sweetbg query`. Fit modes are `cover`, `contain`,
-`center`, and `tile`.
+`center`, `tile`, and `span`.
+
+`span` stretches a single image across the whole monitor layout. It cannot be
+set for a single output with `--output` or in an `[output.NAME]` config
+section.
+
+```sh
+sweetbg set fit span
+sweetbg img ~/Pictures/ultrawide.jpg
+```
 
 Use `sweetbg doctor` to check the session environment, config file, socket and
 daemon reachability when Sweetbg does not start or a client command cannot

@@ -24,4 +24,8 @@ void sweetbg_contain_rects(uint32_t src_w, uint32_t src_h, uint32_t out_w,
 void sweetbg_center_rects(uint32_t src_w, uint32_t src_h, uint32_t out_w,
 	uint32_t out_h, struct sweetbg_placement *out);
 
+void sweetbg_span_rects(uint32_t src_w, uint32_t src_h, uint32_t layout_w,
+	uint32_t layout_h, const struct sweetbg_rect *slice, uint32_t dst_w,
+	uint32_t dst_h, struct sweetbg_placement *out);
+
 #endif

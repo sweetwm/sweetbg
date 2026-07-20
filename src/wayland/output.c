@@ -3,9 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "xdg-output-unstable-v1-client-protocol.h"
+
 #define OUTPUT_MAX_VERSION 4
 
-// strdup is POSIX, not C11; this keeps the module strictly standard
 static char *dup_string(const char *s) {
 	size_t len = strlen(s) + 1;
 	char *copy = malloc(len);
@@ -73,6 +74,73 @@ static void handle_description(
 	output->description = dup_string(description);
 }
 
+static void handle_logical_position(
+	void *data, struct zxdg_output_v1 *xdg_output, int32_t x, int32_t y) {
+	struct sweetbg_output *output = data;
+	(void)xdg_output;
+	if (x != output->logical_x || y != output->logical_y) {
+		output->logical_x = x;
+		output->logical_y = y;
+		output->surface.needs_repaint = true;
+	}
+}
+
+static void handle_logical_size(void *data, struct zxdg_output_v1 *xdg_output,
+	int32_t width, int32_t height) {
+	struct sweetbg_output *output = data;
+	(void)xdg_output;
+	if (width <= 0 || height <= 0) {
+		return;
+	}
+	if ((uint32_t)width != output->logical_width ||
+		(uint32_t)height != output->logical_height) {
+		output->logical_width = (uint32_t)width;
+		output->logical_height = (uint32_t)height;
+		output->surface.needs_repaint = true;
+	}
+}
+
+static void handle_xdg_done(void *data, struct zxdg_output_v1 *xdg_output) {
+	(void)data;
+	(void)xdg_output;
+}
+
+static void handle_xdg_name(
+	void *data, struct zxdg_output_v1 *xdg_output, const char *name) {
+	(void)data;
+	(void)xdg_output;
+	(void)name;
+}
+
+static void handle_xdg_description(void *data,
+	struct zxdg_output_v1 *xdg_output, const char *description) {
+	(void)data;
+	(void)xdg_output;
+	(void)description;
+}
+
+static const struct zxdg_output_v1_listener xdg_output_listener = {
+	.logical_position = handle_logical_position,
+	.logical_size = handle_logical_size,
+	.done = handle_xdg_done,
+	.name = handle_xdg_name,
+	.description = handle_xdg_description,
+};
+
+void sweetbg_output_attach_xdg(
+	struct sweetbg_output *output, struct zxdg_output_manager_v1 *manager) {
+	if (manager == NULL || output->xdg_output != NULL ||
+		output->wl_output == NULL) {
+		return;
+	}
+	output->xdg_output = zxdg_output_manager_v1_get_xdg_output(
+		manager, output->wl_output);
+	if (output->xdg_output != NULL) {
+		zxdg_output_v1_add_listener(
+			output->xdg_output, &xdg_output_listener, output);
+	}
+}
+
 static const struct wl_output_listener output_listener = {
 	.geometry = handle_geometry,
 	.mode = handle_mode,
@@ -109,6 +177,9 @@ static void output_destroy(struct sweetbg_output *output) {
 	wl_list_remove(&output->link);
 	// Tear the layer surface down before its output
 	sweetbg_surface_destroy(&output->surface);
+	if (output->xdg_output != NULL) {
+		zxdg_output_v1_destroy(output->xdg_output);
+	}
 	if (output->wl_output != NULL) {
 		wl_output_destroy(output->wl_output);
 	}
@@ -117,15 +188,16 @@ static void output_destroy(struct sweetbg_output *output) {
 	free(output);
 }
 
-void sweetbg_output_remove(struct wl_list *outputs, uint32_t global_name) {
+bool sweetbg_output_remove(struct wl_list *outputs, uint32_t global_name) {
 	struct sweetbg_output *output;
 	struct sweetbg_output *tmp;
 	wl_list_for_each_safe(output, tmp, outputs, link) {
 		if (output->global_name == global_name) {
 			output_destroy(output);
-			return;
+			return true;
 		}
 	}
+	return false;
 }
 
 void sweetbg_outputs_finish(struct wl_list *outputs) {

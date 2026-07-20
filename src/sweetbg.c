@@ -189,7 +189,14 @@ static int cmd_set(int argc, char **argv) {
 		enum sweetbg_fit fit;
 		if (!sweetbg_fit_from_name(value, &fit)) {
 			fprintf(stderr, "sweetbg: fit must be cover, contain, "
-					"center, or tile\n");
+					"center, tile, or span\n");
+			return 2;
+		}
+		if (output != NULL && sweetbg_fit_is_global_only(fit)) {
+			fprintf(stderr,
+				"sweetbg: fit %s cannot be scoped to an "
+				"output\n",
+				sweetbg_fit_name(fit));
 			return 2;
 		}
 		set_field = SWEETBG_SET_FIT;
@@ -367,7 +374,7 @@ static void usage(FILE *out) {
 	      "  img <name>=<path> ...      set a wallpaper per output\n"
 	      "  img <path> --output <name> set the wallpaper on one output\n"
 	      "  set fit <mode>             set fit: "
-	      "cover|contain|center|tile\n"
+	      "cover|contain|center|tile|span\n"
 	      "  set fit <mode> --output <name>\n"
 	      "                             set fit on one output\n"
 	      "  set color <#rrggbb>        set the background color\n"

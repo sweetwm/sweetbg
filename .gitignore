@@ -2,3 +2,4 @@ build/
 build-asan/
 build-release/
 build-valgrind/
+tests/

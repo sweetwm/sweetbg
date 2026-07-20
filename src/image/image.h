@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "config/config.h"
+#include "image/fit.h"
 
 struct sweetbg_image {
 	uint32_t width;
@@ -21,5 +22,9 @@ void sweetbg_image_free(struct sweetbg_image *img);
 
 bool sweetbg_image_render(const struct sweetbg_image *src, enum sweetbg_fit fit,
 	uint32_t out_w, uint32_t out_h, uint32_t color, uint8_t *dst);
+
+bool sweetbg_image_render_placement(const struct sweetbg_image *src,
+	const struct sweetbg_placement *place, uint32_t out_w, uint32_t out_h,
+	uint8_t *dst);
 
 #endif

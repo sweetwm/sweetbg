@@ -15,10 +15,16 @@ const char *sweetbg_fit_name(enum sweetbg_fit fit) {
 		return "center";
 	case SWEETBG_FIT_TILE:
 		return "tile";
+	case SWEETBG_FIT_SPAN:
+		return "span";
 	case SWEETBG_FIT_COVER:
 		break;
 	}
 	return "cover";
+}
+
+bool sweetbg_fit_is_global_only(enum sweetbg_fit fit) {
+	return fit == SWEETBG_FIT_SPAN;
 }
 
 bool sweetbg_fit_from_name(const char *name, enum sweetbg_fit *out) {
@@ -30,6 +36,8 @@ bool sweetbg_fit_from_name(const char *name, enum sweetbg_fit *out) {
 		*out = SWEETBG_FIT_CENTER;
 	} else if (strcmp(name, "tile") == 0) {
 		*out = SWEETBG_FIT_TILE;
+	} else if (strcmp(name, "span") == 0) {
+		*out = SWEETBG_FIT_SPAN;
 	} else {
 		return false;
 	}
@@ -136,7 +144,7 @@ static bool apply_pair(struct sweetbg_config *cfg, const char *key,
 		if (!sweetbg_fit_from_name(text, &cfg->fit)) {
 			snprintf(err, err_size,
 				"%s:%d: fit must be \"cover\", \"contain\", "
-				"\"center\", or \"tile\"",
+				"\"center\", \"tile\", or \"span\"",
 				name, line);
 			return false;
 		}
@@ -167,6 +175,12 @@ static bool apply_output_pair(struct sweetbg_config_output *output,
 				"%s:%d: fit must be \"cover\", \"contain\", "
 				"\"center\", or \"tile\"",
 				name, line);
+			return false;
+		}
+		if (sweetbg_fit_is_global_only(output->fit)) {
+			snprintf(err, err_size,
+				"%s:%d: fit \"%s\" cannot be set per output",
+				name, line, text);
 			return false;
 		}
 		output->has_fit = true;

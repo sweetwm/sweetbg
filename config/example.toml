@@ -9,15 +9,17 @@ image = "/home/me/Pictures/wallpaper.jpg"
 # image in the "contain" and "center" fit modes.
 color = "#1e1e2e"
 
-# Image fit mode: "cover", "contain", "center", or "tile".
+# Image fit mode: "cover", "contain", "center", "tile", or "span".
 #   cover   - fill the output, cropping overflow from the center
 #   contain - fit inside the output, letterboxed with the background color
 #   center  - native size, centered (cropped if larger, padded if smaller)
 #   tile    - repeat at native size across the output
+#   span    - stretch one image across every output, each showing its slice
 fit = "cover"
 
 # Per-output sections override defaults for a single output.
 # The name is what `sweetbg query` reports (e.g. DP-1, HDMI-A-1).
+# "span" is not valid here: it is defined across the whole layout.
 # [output.DP-1]
 # image = "/home/me/Pictures/left.jpg"
 # fit = "contain"

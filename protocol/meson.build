@@ -8,6 +8,7 @@ protocols = [
 	wl_protocol_dir / 'stable' / 'xdg-shell' / 'xdg-shell.xml',
 	wl_protocol_dir / 'stable' / 'viewporter' / 'viewporter.xml',
 	wl_protocol_dir / 'staging' / 'fractional-scale' / 'fractional-scale-v1.xml',
+	wl_protocol_dir / 'unstable' / 'xdg-output' / 'xdg-output-unstable-v1.xml',
 	meson.current_source_dir() / 'wlr-layer-shell-unstable-v1.xml',
 ]
 

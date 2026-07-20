@@ -258,7 +258,38 @@ static void spawn_prepare(const char *name, const char *path) {
 	}
 }
 
+static void spread_span_repaint(struct daemon *daemon) {
+	if (daemon->fit != SWEETBG_FIT_SPAN) {
+		daemon->reg->layout_dirty = false;
+		return;
+	}
+
+	bool dirty = daemon->reg->layout_dirty;
+	struct sweetbg_output *output;
+	if (!dirty) {
+		wl_list_for_each(output, &daemon->reg->outputs, link) {
+			if (output->surface.configured &&
+				output->surface.needs_repaint) {
+				dirty = true;
+				break;
+			}
+		}
+	}
+	if (!dirty) {
+		return;
+	}
+
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		if (output->surface.configured) {
+			output->surface.needs_repaint = true;
+		}
+	}
+	daemon->reg->layout_dirty = false;
+}
+
 static void reconcile_paint(struct daemon *daemon) {
+	spread_span_repaint(daemon);
+
 	struct sweetbg_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured ||
@@ -531,9 +562,11 @@ static uint8_t handle_query_outputs(
 		uint32_t ph;
 		sweetbg_surface_buffer_size(
 			&output->surface, output->scale, &pw, &ph);
-		append_line(message, message_size, &off, "%s %u %u %u %u\n",
-			output->name, pw, ph, scale,
-			(unsigned)effective_fit(daemon, output));
+		append_line(message, message_size, &off,
+			"%s %u %u %u %u %d %d %u %u\n", output->name, pw, ph,
+			scale, (unsigned)effective_fit(daemon, output),
+			output->logical_x, output->logical_y,
+			output->logical_width, output->logical_height);
 	}
 	if (off > 0 && off <= message_size && message[off - 1] == '\n') {
 		message[off - 1] = '\0';
@@ -626,11 +659,17 @@ static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 	}
 
 	if (req.field == SWEETBG_SET_FIT) {
-		if (req.value > SWEETBG_FIT_TILE) {
+		if (req.value > SWEETBG_FIT_SPAN) {
 			snprintf(message, message_size, "invalid fit mode");
 			return SWEETBG_STATUS_ERR_BAD_REQUEST;
 		}
 		enum sweetbg_fit fit = (enum sweetbg_fit)req.value;
+		if (req.output[0] != '\0' && sweetbg_fit_is_global_only(fit)) {
+			snprintf(message, message_size,
+				"fit %s cannot be scoped to an output",
+				sweetbg_fit_name(fit));
+			return SWEETBG_STATUS_ERR_BAD_REQUEST;
+		}
 		if (req.output[0] != '\0') {
 			struct sweetbg_output *output =
 				find_output(daemon, req.output);

@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "image/image.h"
+#include "image/layout.h"
 #include "ipc/protocol.h"
 
 #define MAX_OUTPUTS 64
@@ -121,6 +122,7 @@ struct output_info {
 	uint32_t height;
 	int32_t scale;
 	enum sweetbg_fit fit;
+	struct sweetbg_layout_output logical;
 };
 
 static int query_outputs(struct output_info *list, int max,
@@ -175,6 +177,10 @@ static int query_outputs(struct output_info *list, int max,
 		const char *hs = strtok_r(NULL, " ", &field_save);
 		const char *ss = strtok_r(NULL, " ", &field_save);
 		const char *fs = strtok_r(NULL, " ", &field_save);
+		const char *lxs = strtok_r(NULL, " ", &field_save);
+		const char *lys = strtok_r(NULL, " ", &field_save);
+		const char *lws = strtok_r(NULL, " ", &field_save);
+		const char *lhs = strtok_r(NULL, " ", &field_save);
 		if (name == NULL || ws == NULL || hs == NULL || ss == NULL ||
 			strlen(name) >= sizeof(list[count].name)) {
 			continue;
@@ -195,10 +201,31 @@ static int query_outputs(struct output_info *list, int max,
 		list[count].height = (uint32_t)h;
 		list[count].scale = (int32_t)s;
 		list[count].fit = *fit;
+		list[count].logical =
+			(struct sweetbg_layout_output){0, 0, 0, 0};
+		if (lxs != NULL && lys != NULL && lws != NULL && lhs != NULL) {
+			char *end_lx;
+			char *end_ly;
+			char *end_lw;
+			char *end_lh;
+			long lx = strtol(lxs, &end_lx, 10);
+			long ly = strtol(lys, &end_ly, 10);
+			unsigned long lw = strtoul(lws, &end_lw, 10);
+			unsigned long lh = strtoul(lhs, &end_lh, 10);
+			if (*end_lx == '\0' && *end_ly == '\0' &&
+				*end_lw == '\0' && *end_lh == '\0' &&
+				lx >= INT32_MIN && lx <= INT32_MAX &&
+				ly >= INT32_MIN && ly <= INT32_MAX) {
+				list[count].logical.x = (int32_t)lx;
+				list[count].logical.y = (int32_t)ly;
+				list[count].logical.w = (uint32_t)lw;
+				list[count].logical.h = (uint32_t)lh;
+			}
+		}
 		if (fs != NULL) {
 			char *end_f;
 			unsigned long f = strtoul(fs, &end_f, 10);
-			if (*end_f == '\0' && f <= SWEETBG_FIT_TILE) {
+			if (*end_f == '\0' && f <= SWEETBG_FIT_SPAN) {
 				list[count].fit = (enum sweetbg_fit)f;
 			}
 		}
@@ -207,8 +234,32 @@ static int query_outputs(struct output_info *list, int max,
 	return count;
 }
 
-static int prepare_memfd(const struct sweetbg_image *image, uint32_t width,
-	uint32_t height, enum sweetbg_fit fit, uint32_t color) {
+static bool span_placement(const struct sweetbg_image *image,
+	const struct output_info *list, int count, int index, uint32_t width,
+	uint32_t height, struct sweetbg_placement *out) {
+	struct sweetbg_layout_output boxes[MAX_OUTPUTS];
+	for (int i = 0; i < count; i++) {
+		boxes[i] = list[i].logical;
+	}
+
+	uint32_t layout_w;
+	uint32_t layout_h;
+	struct sweetbg_rect slice;
+	if (!sweetbg_layout_slice(boxes, (size_t)count, (size_t)index,
+		    &layout_w, &layout_h, &slice)) {
+		return false;
+	}
+
+	sweetbg_span_rects(image->width, image->height, layout_w, layout_h,
+		&slice, width, height, out);
+	return true;
+}
+
+static int prepare_memfd(const struct sweetbg_image *image,
+	const struct output_info *list, int count, int index, uint32_t color) {
+	uint32_t width = list[index].width;
+	uint32_t height = list[index].height;
+	enum sweetbg_fit fit = list[index].fit;
 	if (width == 0 || height == 0 || width > MAX_PREPARE_DIMENSION ||
 		height > MAX_PREPARE_DIMENSION) {
 		return -1;
@@ -230,7 +281,18 @@ static int prepare_memfd(const struct sweetbg_image *image, uint32_t width,
 		close(fd);
 		return -1;
 	}
-	bool ok = sweetbg_image_render(image, fit, width, height, color, data);
+	struct sweetbg_placement place;
+	bool ok;
+	if (fit == SWEETBG_FIT_SPAN && span_placement(image, list, count, index,
+					       width, height, &place)) {
+		ok = sweetbg_image_render_placement(
+			image, &place, width, height, data);
+	} else {
+		// Also the path when span has no usable layout yet
+		ok = sweetbg_image_render(image,
+			fit == SWEETBG_FIT_SPAN ? SWEETBG_FIT_COVER : fit,
+			width, height, color, data);
+	}
 	munmap(data, size);
 	if (!ok) {
 		close(fd);
@@ -319,8 +381,7 @@ int sweetbg_client_set_image(const char *path, const char *output) {
 		if (output != NULL && strcmp(outputs[i].name, output) != 0) {
 			continue;
 		}
-		int memfd = prepare_memfd(&image, outputs[i].width,
-			outputs[i].height, outputs[i].fit, color);
+		int memfd = prepare_memfd(&image, outputs, count, i, color);
 		if (memfd < 0) {
 			fprintf(stderr, "sweetbg: failed to prepare %s\n",
 				outputs[i].name);
@@ -357,9 +418,11 @@ int sweetbg_client_prepare_output(const char *name, const char *path) {
 	}
 
 	const struct output_info *target = NULL;
+	int index = -1;
 	for (int i = 0; i < count; i++) {
 		if (strcmp(outputs[i].name, name) == 0) {
 			target = &outputs[i];
+			index = i;
 			break;
 		}
 	}
@@ -375,8 +438,7 @@ int sweetbg_client_prepare_output(const char *name, const char *path) {
 		return 1;
 	}
 
-	int memfd = prepare_memfd(
-		&image, target->width, target->height, target->fit, color);
+	int memfd = prepare_memfd(&image, outputs, count, index, color);
 	int rc = 1;
 	if (memfd >= 0) {
 		rc = send_prepared(target, SWEETBG_IMG_REPAINT, path, memfd);

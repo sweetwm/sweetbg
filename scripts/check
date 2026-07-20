@@ -16,5 +16,5 @@ ninja -C build
 if meson test -C build --list >/dev/null 2>&1; then
 	meson test -C build --print-errorlogs
 else
-	printf 'No tests defined yet; skipping.\n'
+	printf 'No tests present (tests/ is local-only); skipping.\n'
 fi

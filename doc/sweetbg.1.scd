@@ -35,14 +35,19 @@ parses arguments, sends one request, prints the response, and returns.
 	config file (see *sweetbg*(5)) so it is restored on the next start.
 
 *set fit* <mode>
-	Change the fit mode at runtime to _cover_, _contain_, _center_, or
-	_tile_, repainting the affected outputs. Without *--output*, this sets
-	the default fit mode for every output and clears runtime per-output fit
-	overrides.
+	Change the fit mode at runtime to _cover_, _contain_, _center_,
+	_tile_, or _span_, repainting the affected outputs. Without *--output*,
+	this sets the default fit mode for every output and clears runtime
+	per-output fit overrides.
+
+	_span_ stretches one image across the whole monitor layout, giving each
+	output its own slice. Because the slices are cut from the bounding box of
+	all outputs, moving, adding, or removing a monitor repaints every output.
 
 *set fit* <mode> *--output* <name>
 	Change the fit mode for the single output <name>. Other outputs keep
-	using either their own override or the default fit mode.
+	using either their own override or the default fit mode. _span_ is
+	rejected here, since it is defined across all outputs at once.
 
 *set color* <#rrggbb>
 	Change the background color at runtime. It is shown before an image is

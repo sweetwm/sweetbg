@@ -164,6 +164,29 @@ static void render_tile(const struct sweetbg_image *src, uint32_t out_w,
 	}
 }
 
+bool sweetbg_image_render_placement(const struct sweetbg_image *src,
+	const struct sweetbg_placement *place, uint32_t out_w, uint32_t out_h,
+	uint8_t *dst) {
+	if (src->pixels == NULL || src->width == 0 || src->height == 0 ||
+		out_w == 0 || out_h == 0) {
+		return false;
+	}
+	if (place->src.w == 0 || place->src.h == 0 || place->dst.w == 0 ||
+		place->dst.h == 0) {
+		return false;
+	}
+	if ((uint64_t)place->src.x + place->src.w > src->width ||
+		(uint64_t)place->src.y + place->src.h > src->height) {
+		return false;
+	}
+	if ((uint64_t)place->dst.x + place->dst.w > out_w ||
+		(uint64_t)place->dst.y + place->dst.h > out_h) {
+		return false;
+	}
+	blit_placement(src, place, out_w, dst);
+	return true;
+}
+
 bool sweetbg_image_render(const struct sweetbg_image *src, enum sweetbg_fit fit,
 	uint32_t out_w, uint32_t out_h, uint32_t color, uint8_t *dst) {
 	if (src->pixels == NULL || src->width == 0 || src->height == 0 ||

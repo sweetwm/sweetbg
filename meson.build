@@ -16,6 +16,8 @@ add_project_arguments(
 	language: 'c',
 )
 
+fs = import('fs')
+
 wayland_client = dependency('wayland-client')
 wayland_protos = dependency('wayland-protocols')
 libpng = dependency('libpng')
@@ -56,6 +58,7 @@ executable(
 	'src/ipc/client.c',
 	'src/image/image.c',
 	'src/image/fit.c',
+	'src/image/layout.c',
 	'src/image/png.c',
 	'src/image/jpeg.c',
 	'src/image/webp.c',
@@ -85,4 +88,7 @@ executable(
 
 subdir('doc')
 subdir('systemd')
-subdir('tests')
+
+if fs.exists('tests/meson.build')
+	subdir('tests')
+endif

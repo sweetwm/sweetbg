@@ -46,6 +46,21 @@ These top-level keys set the defaults applied to every output:
 	- _center_: place the image at its native size, centered; larger images are
 	  cropped, smaller ones are padded with the background color.
 	- _tile_: repeat the image at its native size across the output.
+	- _span_: treat every output as one large surface and give each output its
+	  slice of a single image, so one wallpaper stretches across the whole
+	  monitor layout.
+
+	The layout used by _span_ is the bounding box of all outputs, taken from the
+	positions the compositor reports through the xdg-output protocol. Gaps
+	between outputs, and monitors of different sizes or resolutions, are handled
+	by sampling each output's own region of that box; the image is cover-fitted
+	to the box first, so its aspect ratio is preserved. With a single output,
+	_span_ is identical to _cover_.
+
+	_span_ needs the compositor to support xdg-output
+	(_zxdg_output_manager_v1_), which every wlr-layer-shell compositor in
+	practice does. Without it the layout is unknown and each output falls back
+	to _cover_.
 
 # PER-OUTPUT SECTIONS
 
@@ -54,6 +69,10 @@ output name shown by *sweetbg query* (for example _DP-1_ or _HDMI-A-1_). The
 supported keys are *image* and *fit*, and each key overrides only that
 top-level default. An output without a matching section uses the top-level
 defaults.
+
+*fit* cannot be set to _span_ in an _[output.NAME]_ section, because spanning is
+defined across the whole layout rather than for one output. Setting it there is
+a configuration error.
 
 Set *image* to an empty string to intentionally show the background color on one
 output even when a top-level default image exists. This is what

@@ -12,7 +12,10 @@ enum sweetbg_fit {
 	SWEETBG_FIT_CONTAIN,
 	SWEETBG_FIT_CENTER,
 	SWEETBG_FIT_TILE,
+	SWEETBG_FIT_SPAN,
 };
+
+bool sweetbg_fit_is_global_only(enum sweetbg_fit fit);
 
 const char *sweetbg_fit_name(enum sweetbg_fit fit);
 

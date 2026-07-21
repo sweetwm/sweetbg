@@ -19,12 +19,18 @@
 #include "wayland/registry.h"
 #include "wayland/surface.h"
 
+struct palette {
+	uint32_t colors[SWEETBG_MAX_PALETTE];
+	uint8_t count;
+};
+
 struct assignment {
 	char name[64];
 	char path[PATH_MAX];
 	enum sweetbg_fit fit;
 	bool has_image;
 	bool has_fit;
+	struct palette palette;
 };
 
 #define MAX_ASSIGNMENTS 16
@@ -36,6 +42,7 @@ struct daemon {
 	uint32_t color;
 	enum sweetbg_fit fit;
 	char default_path[PATH_MAX];
+	struct palette default_palette;
 	struct assignment assignments[MAX_ASSIGNMENTS];
 	size_t assignment_count;
 };
@@ -108,6 +115,8 @@ static bool set_blank_assignment(struct daemon *daemon, const char *name) {
 	}
 	entry->path[0] = '\0';
 	entry->has_image = true;
+	// A blank output shows no image, so it must report no colours
+	entry->palette.count = 0;
 	return true;
 }
 
@@ -217,6 +226,29 @@ static enum sweetbg_fit effective_fit(
 						     : daemon->fit;
 }
 
+static const struct palette *effective_palette(
+	const struct daemon *daemon, const struct sweetbg_output *output) {
+	const struct assignment *assigned =
+		const_assignment_for(daemon, output->name);
+	return assigned != NULL && assigned->has_image
+		       ? &assigned->palette
+		       : &daemon->default_palette;
+}
+
+static void set_effective_palette(struct daemon *daemon, const char *name,
+	const uint32_t *colors, uint8_t count) {
+	struct palette *dst = &daemon->default_palette;
+	struct assignment *assigned = assignment_for(daemon, name);
+	if (assigned != NULL && assigned->has_image) {
+		dst = &assigned->palette;
+	}
+	memset(dst, 0, sizeof(*dst));
+	dst->count = count;
+	for (uint8_t i = 0; i < count; i++) {
+		dst->colors[i] = colors[i];
+	}
+}
+
 static void client_binary(char *out, size_t out_size) {
 	ssize_t n = readlink("/proc/self/exe", out, out_size - 1);
 	if (n > 0 && (size_t)n < out_size) {
@@ -314,6 +346,8 @@ struct prepared_request {
 	uint32_t height;
 	char name[64];
 	char path[PATH_MAX];
+	uint32_t colors[SWEETBG_MAX_PALETTE];
+	uint8_t color_count;
 };
 
 static bool parse_prepared(
@@ -347,6 +381,21 @@ static bool parse_prepared(
 	}
 	memcpy(req->path, p + off, path_len);
 	req->path[path_len] = '\0';
+	off += path_len;
+
+	req->color_count = 0;
+	if (off + 4 <= len) {
+		uint32_t n = sweetbg_get_u32(p + off);
+		off += 4;
+		if (n > SWEETBG_MAX_PALETTE || off + (size_t)n * 4 > len) {
+			return false;
+		}
+		for (uint32_t i = 0; i < n; i++) {
+			req->colors[i] = sweetbg_get_u32(p + off) & 0xffffffu;
+			off += 4;
+		}
+		req->color_count = (uint8_t)n;
+	}
 	return true;
 }
 
@@ -411,6 +460,7 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	} else if (req.mode == SWEETBG_IMG_OVERRIDE) {
 		set_image_assignment(daemon, req.name, req.path);
 	}
+	set_effective_palette(daemon, req.name, req.colors, req.color_count);
 	snprintf(message, message_size, "applied %s to %s", req.path, req.name);
 	return SWEETBG_STATUS_OK;
 }
@@ -524,6 +574,7 @@ static uint8_t handle_query_json(
 		const bool blank = has_image && assigned->path[0] == '\0';
 		const char *path =
 			blank ? NULL : effective_path(daemon, output);
+		const struct palette *pal = effective_palette(daemon, output);
 
 		outputs[output_count++] = (struct sweetbg_query_json_output){
 			.name = output->name,
@@ -536,6 +587,8 @@ static uint8_t handle_query_json(
 			.blank = blank,
 			.fit = sweetbg_fit_name(effective_fit(daemon, output)),
 			.fit_override = has_fit,
+			.colors = pal->colors,
+			.color_count = pal->count,
 		};
 	}
 
@@ -543,6 +596,8 @@ static uint8_t handle_query_json(
 		.default_image = daemon->default_path,
 		.color = daemon->color,
 		.default_fit = sweetbg_fit_name(daemon->fit),
+		.default_colors = daemon->default_palette.colors,
+		.default_color_count = daemon->default_palette.count,
 		.outputs = outputs,
 		.output_count = output_count,
 	};
@@ -873,6 +928,7 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 		image_changed = daemon->default_path[0] != '\0' ||
 				any_image_assignment(daemon);
 		daemon->default_path[0] = '\0';
+		daemon->default_palette.count = 0;
 		clear_image_assignments(daemon);
 	}
 	if ((req.flags & SWEETBG_CLEAR_FIT) != 0) {
@@ -1047,6 +1103,7 @@ static void apply_loaded_config(
 	daemon->color = cfg->color;
 	daemon->fit = cfg->fit;
 	daemon->default_path[0] = '\0';
+	daemon->default_palette.count = 0;
 	daemon->assignment_count = 0;
 
 	if (cfg->image[0] != '\0') {

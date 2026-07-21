@@ -74,6 +74,18 @@ static void json_append_nullable_string(struct json_out *json, const char *s) {
 	}
 }
 
+static void json_append_colors(
+	struct json_out *json, const uint32_t *colors, size_t count) {
+	json_append(json, "[");
+	for (size_t i = 0; i < count; i++) {
+		if (i > 0) {
+			json_append(json, ",");
+		}
+		json_append(json, "\"#%06x\"", colors[i] & 0xffffffu);
+	}
+	json_append(json, "]");
+}
+
 bool sweetbg_query_json_write(const struct sweetbg_query_json_state *state,
 	char *out, size_t out_size) {
 	struct json_out json = {
@@ -88,6 +100,9 @@ bool sweetbg_query_json_write(const struct sweetbg_query_json_state *state,
 	json_append(&json,
 		",\"color\":\"#%06x\",\"fit\":", state->color & 0xffffffu);
 	json_append_string(&json, state->default_fit);
+	json_append(&json, ",\"colors\":");
+	json_append_colors(
+		&json, state->default_colors, state->default_color_count);
 	json_append(&json, "},\"outputs\":[");
 
 	for (size_t i = 0; i < state->output_count; i++) {
@@ -109,8 +124,10 @@ bool sweetbg_query_json_write(const struct sweetbg_query_json_state *state,
 			output->image_override ? "true" : "false",
 			output->blank ? "true" : "false");
 		json_append_string(&json, output->fit);
-		json_append(&json, ",\"fitOverride\":%s}",
+		json_append(&json, ",\"fitOverride\":%s,\"colors\":",
 			output->fit_override ? "true" : "false");
+		json_append_colors(&json, output->colors, output->color_count);
+		json_append(&json, "}");
 	}
 
 	json_append(&json, "]}");

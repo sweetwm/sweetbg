@@ -91,7 +91,7 @@ sweetbg clear
 # Show the current wallpaper, fit mode, and connected outputs
 sweetbg query
 
-# Same, as JSON for scripts
+# Same, as JSON for scripts (includes dominant colors per output)
 sweetbg query --json
 
 # Check the session, config, socket, and daemon when something is wrong
@@ -133,6 +133,15 @@ section.
 ```sh
 sweetbg set fit span
 sweetbg img ~/Pictures/ultrawide.jpg
+```
+
+### Theming
+
+`query --json` reports each output's dominant colors, so the current wallpaper
+can drive a color scheme:
+
+```sh
+sweetbg query --json | jq -r '.outputs[0].colors[0]'
 ```
 
 ## Configuration

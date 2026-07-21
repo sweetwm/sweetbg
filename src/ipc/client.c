@@ -13,6 +13,7 @@
 
 #include "image/image.h"
 #include "image/layout.h"
+#include "image/palette.h"
 #include "ipc/protocol.h"
 
 #define MAX_OUTPUTS 64
@@ -302,10 +303,11 @@ static int prepare_memfd(const struct sweetbg_image *image,
 }
 
 static int send_prepared(const struct output_info *out, uint32_t mode,
-	const char *path, int memfd) {
+	const char *path, int memfd, const uint32_t *colors,
+	size_t color_count) {
 	size_t name_len = strlen(out->name);
 	size_t path_len = strlen(path);
-	size_t total = 20 + name_len + 4 + path_len;
+	size_t total = 20 + name_len + 4 + path_len + 4 + color_count * 4;
 	if (total > SWEETBG_IPC_MAX_PAYLOAD) {
 		fprintf(stderr, "sweetbg: image request too long\n");
 		return 1;
@@ -325,6 +327,12 @@ static int send_prepared(const struct output_info *out, uint32_t mode,
 	// NOLINTNEXTLINE(bugprone-not-null-terminated-result)
 	memcpy(payload + off, path, path_len);
 	off += path_len;
+	sweetbg_put_u32(payload + off, (uint32_t)color_count);
+	off += 4;
+	for (size_t i = 0; i < color_count; i++) {
+		sweetbg_put_u32(payload + off, colors[i]);
+		off += 4;
+	}
 
 	int fd = connect_to_daemon(NULL, 0);
 	if (fd < 0) {
@@ -373,6 +381,11 @@ int sweetbg_client_set_image(const char *path, const char *output) {
 		return 1;
 	}
 
+	uint32_t colors[SWEETBG_MAX_PALETTE];
+	size_t color_count;
+	sweetbg_palette_extract(
+		&image, colors, SWEETBG_MAX_PALETTE, &color_count);
+
 	uint32_t mode =
 		output == NULL ? SWEETBG_IMG_DEFAULT : SWEETBG_IMG_OVERRIDE;
 	int rc = 0;
@@ -388,7 +401,8 @@ int sweetbg_client_set_image(const char *path, const char *output) {
 			rc = 1;
 			continue;
 		}
-		if (send_prepared(&outputs[i], mode, path, memfd) != 0) {
+		if (send_prepared(&outputs[i], mode, path, memfd, colors,
+			    color_count) != 0) {
 			rc = 1;
 		} else {
 			applied++;
@@ -438,10 +452,16 @@ int sweetbg_client_prepare_output(const char *name, const char *path) {
 		return 1;
 	}
 
+	uint32_t colors[SWEETBG_MAX_PALETTE];
+	size_t color_count;
+	sweetbg_palette_extract(
+		&image, colors, SWEETBG_MAX_PALETTE, &color_count);
+
 	int memfd = prepare_memfd(&image, outputs, count, index, color);
 	int rc = 1;
 	if (memfd >= 0) {
-		rc = send_prepared(target, SWEETBG_IMG_REPAINT, path, memfd);
+		rc = send_prepared(target, SWEETBG_IMG_REPAINT, path, memfd,
+			colors, color_count);
 		close(memfd);
 	}
 	sweetbg_image_free(&image);

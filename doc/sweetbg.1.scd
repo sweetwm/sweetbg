@@ -92,9 +92,17 @@ parses arguments, sends one request, prints the response, and returns.
 
 *query* *--json*
 	Print the same daemon state as compact JSON for scripts. The object has a
-	_default_ object with _image_, _color_, and _fit_, plus an _outputs_ array.
-	Each output contains _name_, _width_, _height_, _scale_, _configured_,
-	_image_, _imageOverride_, _blank_, _fit_, and _fitOverride_.
+	_default_ object with _image_, _color_, _fit_, and _colors_, plus an
+	_outputs_ array. Each output contains _name_, _width_, _height_, _scale_,
+	_configured_, _image_, _imageOverride_, _blank_, _fit_, _fitOverride_, and
+	_colors_.
+
+	_colors_ is an array of up to six dominant colours of the shown image, as
+	_"#rrggbb"_ strings, most common first. It is empty for an output showing
+	only the background colour (no image, or blanked). The client computes the
+	palette while it decodes; the daemon only stores and reports it. This makes
+	*query --json* a colour source for theming, for example
+	_sweetbg query --json | jq -r '.outputs[0].colors[0]'_.
 
 *doctor*
 	Check the Sweetbg setup and print a compact diagnostic report. It verifies

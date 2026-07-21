@@ -9,6 +9,9 @@
 #define SWEETBG_IPC_HEADER_SIZE 8
 #define SWEETBG_IPC_MAX_PAYLOAD 4096
 
+// Dominant colours a prepared image carries and the daemon reports per output
+#define SWEETBG_MAX_PALETTE 6
+
 enum sweetbg_ipc_command {
 	SWEETBG_CMD_STOP = 1,
 	SWEETBG_CMD_IMG = 2,

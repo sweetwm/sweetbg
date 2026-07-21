@@ -47,6 +47,7 @@ bool sweetbg_fit_from_name(const char *name, enum sweetbg_fit *out) {
 void sweetbg_config_defaults(struct sweetbg_config *cfg) {
 	cfg->image[0] = '\0';
 	cfg->color = DEFAULT_COLOR;
+	cfg->color_auto = false;
 	cfg->fit = SWEETBG_FIT_COVER;
 	cfg->output_count = 0;
 }
@@ -133,11 +134,17 @@ static bool apply_pair(struct sweetbg_config *cfg, const char *key,
 		return true;
 	}
 	if (strcmp(key, "color") == 0) {
+		if (strcmp(text, "auto") == 0) {
+			cfg->color_auto = true;
+			return true;
+		}
 		if (!sweetbg_config_parse_color(text, &cfg->color)) {
 			snprintf(err, err_size,
-				"%s:%d: color must be \"#rrggbb\"", name, line);
+				"%s:%d: color must be \"#rrggbb\" or \"auto\"",
+				name, line);
 			return false;
 		}
+		cfg->color_auto = false;
 		return true;
 	}
 	if (strcmp(key, "fit") == 0) {

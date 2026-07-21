@@ -127,9 +127,10 @@ struct output_info {
 };
 
 static int query_outputs(struct output_info *list, int max,
-	enum sweetbg_fit *fit, uint32_t *color) {
+	enum sweetbg_fit *fit, uint32_t *color, bool *color_auto) {
 	*fit = SWEETBG_FIT_COVER;
 	*color = 0;
+	*color_auto = false;
 	int fd = connect_to_daemon(NULL, 0);
 	if (fd < 0) {
 		return -1;
@@ -168,10 +169,13 @@ static int query_outputs(struct output_info *list, int max,
 		if (name != NULL && strcmp(name, "meta") == 0) {
 			const char *fs = strtok_r(NULL, " ", &field_save);
 			const char *cs = strtok_r(NULL, " ", &field_save);
+			const char *as = strtok_r(NULL, " ", &field_save);
 			if (fs != NULL && cs != NULL) {
 				*fit = (enum sweetbg_fit)strtoul(fs, NULL, 10);
 				*color = (uint32_t)strtoul(cs, NULL, 10);
 			}
+			// Absent on an older daemon: default to a fixed colour
+			*color_auto = as != NULL && strtoul(as, NULL, 10) != 0;
 			continue;
 		}
 		const char *ws = strtok_r(NULL, " ", &field_save);
@@ -365,7 +369,9 @@ int sweetbg_client_set_image(const char *path, const char *output) {
 	struct output_info outputs[MAX_OUTPUTS];
 	enum sweetbg_fit fit;
 	uint32_t color;
-	int count = query_outputs(outputs, MAX_OUTPUTS, &fit, &color);
+	bool color_auto;
+	int count =
+		query_outputs(outputs, MAX_OUTPUTS, &fit, &color, &color_auto);
 	if (count < 0) {
 		return 1;
 	}
@@ -385,6 +391,9 @@ int sweetbg_client_set_image(const char *path, const char *output) {
 	size_t color_count;
 	sweetbg_palette_extract(
 		&image, colors, SWEETBG_MAX_PALETTE, &color_count);
+	// auto letterboxes with the image's dominant colour; the palette is
+	// already computed, so this costs nothing extra
+	uint32_t fill = color_auto && color_count > 0 ? colors[0] : color;
 
 	uint32_t mode =
 		output == NULL ? SWEETBG_IMG_DEFAULT : SWEETBG_IMG_OVERRIDE;
@@ -394,7 +403,7 @@ int sweetbg_client_set_image(const char *path, const char *output) {
 		if (output != NULL && strcmp(outputs[i].name, output) != 0) {
 			continue;
 		}
-		int memfd = prepare_memfd(&image, outputs, count, i, color);
+		int memfd = prepare_memfd(&image, outputs, count, i, fill);
 		if (memfd < 0) {
 			fprintf(stderr, "sweetbg: failed to prepare %s\n",
 				outputs[i].name);
@@ -426,7 +435,9 @@ int sweetbg_client_prepare_output(const char *name, const char *path) {
 	struct output_info outputs[MAX_OUTPUTS];
 	enum sweetbg_fit fit;
 	uint32_t color;
-	int count = query_outputs(outputs, MAX_OUTPUTS, &fit, &color);
+	bool color_auto;
+	int count =
+		query_outputs(outputs, MAX_OUTPUTS, &fit, &color, &color_auto);
 	if (count < 0) {
 		return 1;
 	}
@@ -456,8 +467,9 @@ int sweetbg_client_prepare_output(const char *name, const char *path) {
 	size_t color_count;
 	sweetbg_palette_extract(
 		&image, colors, SWEETBG_MAX_PALETTE, &color_count);
+	uint32_t fill = color_auto && color_count > 0 ? colors[0] : color;
 
-	int memfd = prepare_memfd(&image, outputs, count, index, color);
+	int memfd = prepare_memfd(&image, outputs, count, index, fill);
 	int rc = 1;
 	if (memfd >= 0) {
 		rc = send_prepared(target, SWEETBG_IMG_REPAINT, path, memfd,

@@ -82,7 +82,7 @@ sweetbg set fit cover
 # Change the fit mode for one output only (--output or -o)
 sweetbg set fit contain --output DP-1
 
-# Set the background color (--persist or -p)
+# Set the background color (--persist or -p); "auto" derives it from the image
 sweetbg set color "#1e1e2e" --persist
 
 # Drop the wallpapers and go back to the background color
@@ -143,6 +143,9 @@ can drive a color scheme:
 ```sh
 sweetbg query --json | jq -r '.outputs[0].colors[0]'
 ```
+
+Relatedly, `color = "auto"` (or `sweetbg set color auto`) fills the
+`contain`/`center` letterbox with the image's own dominant color.
 
 ## Configuration
 

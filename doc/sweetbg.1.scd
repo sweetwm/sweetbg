@@ -61,9 +61,14 @@ parses arguments, sends one request, prints the response, and returns.
 	using either their own override or the default fit mode. _span_ is
 	rejected here, since it is defined across all outputs at once.
 
-*set color* <#rrggbb>
+*set color* <#rrggbb|auto>
 	Change the background color at runtime. It is shown before an image is
 	set and behind the image in the _contain_ and _center_ fit modes.
+
+	Pass _auto_ instead of a hex colour to derive the background from each
+	image's dominant colour, so a _contain_ or _center_ letterbox matches the
+	wallpaper. Outputs with no image fall back to the last fixed colour. See
+	*sweetbg*(5).
 
 	Either *set* form accepts *--persist* to also save the change to the
 	config file.

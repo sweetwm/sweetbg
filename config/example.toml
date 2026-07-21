@@ -5,8 +5,9 @@
 # Wallpaper shown at startup. Must be an absolute path to a JPEG, PNG, or WebP.
 image = "/home/me/Pictures/wallpaper.jpg"
 
-# Background color, as "#rrggbb". Shown before an image is set, and behind the
-# image in the "contain" and "center" fit modes.
+# Background color, as "#rrggbb", or "auto" to derive it from each image's
+# dominant color (so a "contain"/"center" letterbox matches the wallpaper).
+# Shown before an image is set, and behind the image in "contain" and "center".
 color = "#1e1e2e"
 
 # Image fit mode: "cover", "contain", "center", "tile", or "span".

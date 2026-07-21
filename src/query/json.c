@@ -97,8 +97,8 @@ bool sweetbg_query_json_write(const struct sweetbg_query_json_state *state,
 
 	json_append(&json, "{\"default\":{\"image\":");
 	json_append_nullable_string(&json, state->default_image);
-	json_append(&json,
-		",\"color\":\"#%06x\",\"fit\":", state->color & 0xffffffu);
+	json_append(&json, ",\"color\":\"#%06x\",\"colorAuto\":%s,\"fit\":",
+		state->color & 0xffffffu, state->color_auto ? "true" : "false");
 	json_append_string(&json, state->default_fit);
 	json_append(&json, ",\"colors\":");
 	json_append_colors(

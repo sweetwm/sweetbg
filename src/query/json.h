@@ -24,6 +24,7 @@ struct sweetbg_query_json_output {
 struct sweetbg_query_json_state {
 	const char *default_image;
 	uint32_t color;
+	bool color_auto;
 	const char *default_fit;
 	const uint32_t *default_colors;
 	size_t default_color_count;

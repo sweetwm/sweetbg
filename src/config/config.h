@@ -36,6 +36,7 @@ struct sweetbg_config_output {
 struct sweetbg_config {
 	char image[PATH_MAX];
 	uint32_t color;
+	bool color_auto;
 	enum sweetbg_fit fit;
 	struct sweetbg_config_output outputs[SWEETBG_CONFIG_MAX_OUTPUTS];
 	size_t output_count;

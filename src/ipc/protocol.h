@@ -12,6 +12,10 @@
 // Dominant colours a prepared image carries and the daemon reports per output
 #define SWEETBG_MAX_PALETTE 6
 
+// SWEETBG_SET_COLOR value meaning "derive from the image", outside the 24-bit
+// RGB range so it can never collide with a real #rrggbb
+#define SWEETBG_COLOR_AUTO 0x01000000u
+
 enum sweetbg_ipc_command {
 	SWEETBG_CMD_STOP = 1,
 	SWEETBG_CMD_IMG = 2,

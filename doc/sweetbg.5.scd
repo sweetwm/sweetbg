@@ -42,6 +42,11 @@ These top-level keys set the defaults applied to every output:
 	the image where the _contain_ and _center_ fit modes do not cover the
 	output. Defaults to _"#1e1e2e"_.
 
+	Set it to _"auto"_ to derive the background from each image's dominant
+	colour, so a _contain_ or _center_ letterbox matches the wallpaper instead
+	of a fixed colour. An output with no image (placeholder, or blanked) has no
+	image to sample, so it falls back to the last fixed _"#rrggbb"_ value.
+
 *fit*
 	Image fit mode. Defaults to _"cover"_.
 

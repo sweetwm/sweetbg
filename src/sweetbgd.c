@@ -40,6 +40,7 @@ struct daemon {
 	struct wl_display *display;
 	struct sweetbg_registry *reg;
 	uint32_t color;
+	bool color_auto;
 	enum sweetbg_fit fit;
 	char default_path[PATH_MAX];
 	struct palette default_palette;
@@ -490,6 +491,11 @@ static uint8_t handle_query(
 	if (daemon->default_path[0] != '\0') {
 		append_line(message, message_size, &off, "default: %s\n",
 			daemon->default_path);
+	} else if (daemon->color_auto) {
+		// No image yet, so auto falls back to the fixed colour
+		append_line(message, message_size, &off,
+			"default: color auto (#%06x)\n",
+			daemon->color & 0xffffffu);
 	} else {
 		append_line(message, message_size, &off,
 			"default: color #%06x\n", daemon->color & 0xffffffu);
@@ -595,6 +601,7 @@ static uint8_t handle_query_json(
 	const struct sweetbg_query_json_state state = {
 		.default_image = daemon->default_path,
 		.color = daemon->color,
+		.color_auto = daemon->color_auto,
 		.default_fit = sweetbg_fit_name(daemon->fit),
 		.default_colors = daemon->default_palette.colors,
 		.default_color_count = daemon->default_palette.count,
@@ -611,8 +618,9 @@ static uint8_t handle_query_json(
 static uint8_t handle_query_outputs(
 	struct daemon *daemon, char *message, size_t message_size) {
 	size_t off = 0;
-	append_line(message, message_size, &off, "meta %u %u\n",
-		(unsigned)daemon->fit, daemon->color & 0xffffffu);
+	append_line(message, message_size, &off, "meta %u %u %u\n",
+		(unsigned)daemon->fit, daemon->color & 0xffffffu,
+		daemon->color_auto ? 1u : 0u);
 	struct sweetbg_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured || output->name == NULL) {
@@ -766,16 +774,30 @@ static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 				"color cannot be scoped to an output");
 			return SWEETBG_STATUS_ERR_BAD_REQUEST;
 		}
-		if (req.value > 0xffffffu) {
+		bool want_auto = req.value == SWEETBG_COLOR_AUTO;
+		if (!want_auto && req.value > 0xffffffu) {
 			snprintf(message, message_size, "invalid color");
 			return SWEETBG_STATUS_ERR_BAD_REQUEST;
 		}
-		if (req.value != daemon->color) {
+		bool changed;
+		if (want_auto) {
+			changed = !daemon->color_auto;
+			daemon->color_auto = true;
+		} else {
+			changed = daemon->color_auto ||
+				  req.value != daemon->color;
+			daemon->color_auto = false;
 			daemon->color = req.value;
+		}
+		if (changed) {
 			repaint_after_change(daemon, true, false);
 		}
-		snprintf(message, message_size, "color #%06x",
-			daemon->color & 0xffffffu);
+		if (daemon->color_auto) {
+			snprintf(message, message_size, "color auto");
+		} else {
+			snprintf(message, message_size, "color #%06x",
+				daemon->color & 0xffffffu);
+		}
 		return SWEETBG_STATUS_OK;
 	}
 	snprintf(message, message_size, "unknown set field");
@@ -1101,6 +1123,7 @@ static bool validate_config_images(
 static void apply_loaded_config(
 	struct daemon *daemon, const struct sweetbg_config *cfg) {
 	daemon->color = cfg->color;
+	daemon->color_auto = cfg->color_auto;
 	daemon->fit = cfg->fit;
 	daemon->default_path[0] = '\0';
 	daemon->default_palette.count = 0;

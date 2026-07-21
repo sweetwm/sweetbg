@@ -189,7 +189,7 @@ static int cmd_set(int argc, char **argv) {
 	}
 	if (field == NULL || value == NULL) {
 		fprintf(stderr, "usage: sweetbg set fit <mode> | "
-				"color <#rrggbb> [--output <name>] "
+				"color <#rrggbb|auto> [--output <name>] "
 				"[--persist]\n");
 		return 2;
 	}
@@ -225,15 +225,23 @@ static int cmd_set(int argc, char **argv) {
 					"output\n");
 			return 2;
 		}
-		uint32_t color;
-		if (!sweetbg_config_parse_color(value, &color)) {
-			fprintf(stderr, "sweetbg: color must be \"#rrggbb\"\n");
-			return 2;
-		}
 		set_field = SWEETBG_SET_COLOR;
-		set_value = color;
-		snprintf(canon, sizeof(canon), "#%06x", color & 0xffffffu);
-		persist_value = canon;
+		if (strcmp(value, "auto") == 0) {
+			set_value = SWEETBG_COLOR_AUTO;
+			persist_value = "auto";
+		} else {
+			uint32_t color;
+			if (!sweetbg_config_parse_color(value, &color)) {
+				fprintf(stderr,
+					"sweetbg: color must be \"#rrggbb\" or "
+					"\"auto\"\n");
+				return 2;
+			}
+			set_value = color;
+			snprintf(canon, sizeof(canon), "#%06x",
+				color & 0xffffffu);
+			persist_value = canon;
+		}
 	} else {
 		fprintf(stderr,
 			"sweetbg: unknown set field '%s' (use fit or color)\n",
@@ -394,7 +402,8 @@ static void usage(FILE *out) {
 	      "cover|contain|center|tile|span\n"
 	      "  set fit <mode> --output <name>\n"
 	      "                             set fit on one output\n"
-	      "  set color <#rrggbb>        set the background color\n"
+	      "  set color <#rrggbb|auto>   set the background color "
+	      "(auto: from image)\n"
 	      "  clear                      clear images to the background "
 	      "color\n"
 	      "  clear --output <name>      clear one output image override\n"

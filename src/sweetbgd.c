@@ -391,6 +391,13 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 		return SWEETBG_STATUS_ERR_IMAGE;
 	}
 
+	if (req.mode == SWEETBG_IMG_REPAINT &&
+		strcmp(req.path, effective_path(daemon, match)) != 0) {
+		snprintf(message, message_size, "superseded prepare for %s",
+			req.name);
+		return SWEETBG_STATUS_OK;
+	}
+
 	if (!sweetbg_surface_attach_prepared(&match->surface, daemon->reg->shm,
 		    match->scale, fd, req.width, req.height)) {
 		snprintf(message, message_size, "could not attach buffer");

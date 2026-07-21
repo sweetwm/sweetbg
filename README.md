@@ -166,9 +166,9 @@ documented in [`sweetbg(5)`](doc/sweetbg.5.scd).
 
 The man pages are the full reference:
 
-- [`sweetbg(1)`](doc/sweetbg.1.scd) — client commands, options, and fit modes
-- [`sweetbgd(1)`](doc/sweetbgd.1.scd) — daemon and its environment
-- [`sweetbg(5)`](doc/sweetbg.5.scd) — every config key
+- [`sweetbg(1)`](doc/sweetbg.1.scd) - client commands, options, and fit modes
+- [`sweetbgd(1)`](doc/sweetbgd.1.scd) - daemon and its environment
+- [`sweetbg(5)`](doc/sweetbg.5.scd) - every config key
 
 Once installed, read them with `man sweetbg`, `man sweetbgd`, and
 `man 5 sweetbg`.

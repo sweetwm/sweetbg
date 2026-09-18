@@ -5,13 +5,12 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
 #include "ipc/protocol.h"
 
-#define CLIENT_RECV_TIMEOUT_SECONDS 2
+#define CLIENT_REQUEST_TIMEOUT_MS 1000
 
 enum socket_state {
 	SOCKET_ABSENT,
@@ -83,7 +82,7 @@ bool sweetbg_ipc_server_init(struct sweetbg_ipc_server *server) {
 		return false;
 	}
 
-	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
 	if (fd < 0) {
 		fprintf(stderr, "sweetbgd: cannot create socket: %s\n",
 			strerror(errno));
@@ -114,23 +113,18 @@ void sweetbg_ipc_server_handle(struct sweetbg_ipc_server *server,
 	sweetbg_ipc_dispatch_fn dispatch, void *data, bool *stop) {
 	*stop = false;
 
-	int client = accept4(server->fd, NULL, NULL, SOCK_CLOEXEC);
+	int client =
+		accept4(server->fd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
 	if (client < 0) {
 		return;
 	}
-
-	struct timeval timeout = {
-		.tv_sec = CLIENT_RECV_TIMEOUT_SECONDS,
-		.tv_usec = 0,
-	};
-	setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
 	uint8_t type;
 	uint8_t payload[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
 	int fd = -1;
-	if (sweetbg_ipc_recv_frame_fd(
-		    client, &type, payload, &len, sizeof(payload), &fd)) {
+	if (sweetbg_ipc_recv_frame_fd(client, &type, payload, &len,
+		    sizeof(payload), &fd, CLIENT_REQUEST_TIMEOUT_MS)) {
 		// Sized for a multi-output query response, capped by the frame
 		char message[SWEETBG_IPC_MAX_PAYLOAD] = {0};
 		uint8_t status = dispatch(data, type, payload, len, fd, message,

@@ -1,10 +1,13 @@
 #include "ipc/protocol.h"
 
 #include <errno.h>
+#include <limits.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 void sweetbg_put_u32(uint8_t *p, uint32_t value) {
@@ -169,9 +172,104 @@ bool sweetbg_ipc_send_frame_fd(
 	return true;
 }
 
+static bool make_deadline(struct timespec *deadline, uint32_t timeout_ms) {
+	if (clock_gettime(CLOCK_MONOTONIC, deadline) != 0) {
+		return false;
+	}
+	deadline->tv_sec += (time_t)(timeout_ms / 1000);
+	deadline->tv_nsec += (long)(timeout_ms % 1000) * 1000000L;
+	if (deadline->tv_nsec >= 1000000000L) {
+		deadline->tv_sec++;
+		deadline->tv_nsec -= 1000000000L;
+	}
+	return true;
+}
+
+static bool wait_readable(int fd, const struct timespec *deadline) {
+	for (;;) {
+		struct timespec now;
+		if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+			return false;
+		}
+		time_t seconds = deadline->tv_sec - now.tv_sec;
+		long nanoseconds = deadline->tv_nsec - now.tv_nsec;
+		if (nanoseconds < 0) {
+			seconds--;
+			nanoseconds += 1000000000L;
+		}
+		if (seconds < 0 || (seconds == 0 && nanoseconds == 0)) {
+			errno = ETIMEDOUT;
+			return false;
+		}
+
+		uint64_t millis = (uint64_t)seconds * 1000u +
+				  ((uint64_t)nanoseconds + 999999u) / 1000000u;
+		int timeout = millis > INT_MAX ? INT_MAX : (int)millis;
+		struct pollfd pollfd = {.fd = fd, .events = POLLIN};
+		int ready = poll(&pollfd, 1, timeout);
+		if (ready > 0) {
+			return true;
+		}
+		if (ready == 0) {
+			errno = ETIMEDOUT;
+			return false;
+		}
+		if (errno != EINTR) {
+			return false;
+		}
+	}
+}
+
+static bool read_full_until(
+	int fd, void *buf, size_t len, const struct timespec *deadline) {
+	uint8_t *p = buf;
+	size_t got = 0;
+	while (got < len) {
+		ssize_t n = recv(fd, p + got, len - got, MSG_DONTWAIT);
+		if (n > 0) {
+			got += (size_t)n;
+			continue;
+		}
+		if (n == 0) {
+			return false;
+		}
+		if (errno == EINTR) {
+			continue;
+		}
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
+			return false;
+		}
+		if (!wait_readable(fd, deadline)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static ssize_t recvmsg_until(
+	int fd, struct msghdr *msg, const struct timespec *deadline) {
+	for (;;) {
+		ssize_t got = recvmsg(fd, msg, MSG_CMSG_CLOEXEC | MSG_DONTWAIT);
+		if (got >= 0) {
+			return got;
+		}
+		if (errno == EINTR) {
+			continue;
+		}
+		if ((errno != EAGAIN && errno != EWOULDBLOCK) ||
+			!wait_readable(fd, deadline)) {
+			return -1;
+		}
+	}
+}
+
 bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
-	uint32_t *len, uint32_t max, int *out_fd) {
+	uint32_t *len, uint32_t max, int *out_fd, uint32_t timeout_ms) {
 	*out_fd = -1;
+	struct timespec deadline;
+	if (!make_deadline(&deadline, timeout_ms)) {
+		return false;
+	}
 
 	uint8_t header[SWEETBG_IPC_HEADER_SIZE];
 	struct iovec iov = {.iov_base = header, .iov_len = sizeof(header)};
@@ -188,10 +286,7 @@ bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
 	msg.msg_control = control.bytes;
 	msg.msg_controllen = sizeof(control.bytes);
 
-	ssize_t got;
-	do {
-		got = recvmsg(fd, &msg, MSG_CMSG_CLOEXEC);
-	} while (got < 0 && errno == EINTR);
+	ssize_t got = recvmsg_until(fd, &msg, &deadline);
 	if (got <= 0) {
 		return false;
 	}
@@ -225,8 +320,8 @@ bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
 	}
 
 	if ((size_t)got < sizeof(header) &&
-		!sweetbg_ipc_read_full(
-			fd, header + got, sizeof(header) - (size_t)got)) {
+		!read_full_until(fd, header + got, sizeof(header) - (size_t)got,
+			&deadline)) {
 		goto fail;
 	}
 	if (header[0] != SWEETBG_IPC_VERSION) {
@@ -239,7 +334,7 @@ bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
 	if (plen > max || plen > SWEETBG_IPC_MAX_PAYLOAD) {
 		goto fail;
 	}
-	if (plen > 0 && !sweetbg_ipc_read_full(fd, payload, plen)) {
+	if (plen > 0 && !read_full_until(fd, payload, plen, &deadline)) {
 		goto fail;
 	}
 

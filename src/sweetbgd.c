@@ -1246,6 +1246,8 @@ static int run(void) {
 }
 
 int main(int argc, char **argv) {
+	setvbuf(stdout, NULL, _IOLBF, 0);
+
 	if (argc > 1) {
 		const char *arg = argv[1];
 

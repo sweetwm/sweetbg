@@ -181,7 +181,12 @@ static void output_destroy(struct sweetbg_output *output) {
 		zxdg_output_v1_destroy(output->xdg_output);
 	}
 	if (output->wl_output != NULL) {
-		wl_output_destroy(output->wl_output);
+		if (wl_output_get_version(output->wl_output) >=
+			WL_OUTPUT_RELEASE_SINCE_VERSION) {
+			wl_output_release(output->wl_output);
+		} else {
+			wl_output_destroy(output->wl_output);
+		}
 	}
 	free(output->name);
 	free(output->description);

@@ -65,7 +65,8 @@ bool sweetbg_ipc_recv_frame(
 
 bool sweetbg_ipc_send_frame_fd(
 	int fd, uint8_t type, const void *payload, uint32_t len, int pass_fd);
+// timeout_ms covers the initial header and payload as one deadline
 bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
-	uint32_t *len, uint32_t max, int *out_fd);
+	uint32_t *len, uint32_t max, int *out_fd, uint32_t timeout_ms);
 
 #endif

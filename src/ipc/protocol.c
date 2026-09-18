@@ -196,19 +196,32 @@ bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
 		return false;
 	}
 
-	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-	if (cmsg != NULL && cmsg->cmsg_level == SOL_SOCKET &&
-		cmsg->cmsg_type == SCM_RIGHTS &&
-		cmsg->cmsg_len == CMSG_LEN(sizeof(int))) {
-		memcpy(out_fd, CMSG_DATA(cmsg), sizeof(int));
-	}
-	// A truncated control message could leave a dangling fd in the kernel
-	if ((msg.msg_flags & MSG_CTRUNC) != 0) {
-		if (*out_fd >= 0) {
-			close(*out_fd);
-			*out_fd = -1;
+	size_t received_fd_count = 0;
+	for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
+		cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+		if (cmsg->cmsg_level != SOL_SOCKET ||
+			cmsg->cmsg_type != SCM_RIGHTS ||
+			cmsg->cmsg_len < CMSG_LEN(0)) {
+			continue;
 		}
-		return false;
+
+		size_t count = (cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int);
+		for (size_t i = 0; i < count; i++) {
+			int received;
+			memcpy(&received,
+				CMSG_DATA(cmsg) + i * sizeof(received),
+				sizeof(received));
+			if (*out_fd < 0) {
+				*out_fd = received;
+			} else {
+				close(received);
+			}
+			received_fd_count++;
+		}
+	}
+	// exactly zero or one fd is valid; reject confused or hostile peers
+	if (received_fd_count > 1 || (msg.msg_flags & MSG_CTRUNC) != 0) {
+		goto fail;
 	}
 
 	if ((size_t)got < sizeof(header) &&

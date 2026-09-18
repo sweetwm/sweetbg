@@ -13,6 +13,7 @@ struct wp_viewporter;
 struct wp_viewport;
 struct wp_fractional_scale_manager_v1;
 struct wp_fractional_scale_v1;
+struct wp_single_pixel_buffer_manager_v1;
 
 struct sweetbg_surface {
 	struct wl_surface *wl_surface;
@@ -40,7 +41,9 @@ void sweetbg_surface_buffer_size(const struct sweetbg_surface *surface,
 	int32_t int_scale, uint32_t *pixel_width, uint32_t *pixel_height);
 
 bool sweetbg_surface_paint_color(struct sweetbg_surface *surface,
-	struct wl_shm *shm, int32_t scale, uint32_t color);
+	struct wl_shm *shm,
+	struct wp_single_pixel_buffer_manager_v1 *single_pixel_manager,
+	int32_t scale, uint32_t color);
 
 bool sweetbg_surface_attach_prepared(struct sweetbg_surface *surface,
 	struct wl_shm *shm, int32_t scale, int fd, uint32_t width,

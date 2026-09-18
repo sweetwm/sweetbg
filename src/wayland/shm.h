@@ -8,8 +8,7 @@
 struct wl_buffer;
 struct wl_shm;
 
-// A single wl_shm buffer and its mapped pixels. Pixel format is XRGB8888:
-// one little-endian 32-bit word per pixel, 0x00RRGGBB, opaque (X unused)
+// An owned wl_buffer, optionally backed by mapped XRGB8888 shm pixels
 struct sweetbg_buffer {
 	struct wl_buffer *wl_buffer;
 	void *data;
@@ -25,6 +24,10 @@ bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 
 bool sweetbg_buffer_from_fd(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 	int fd, uint32_t width, uint32_t height);
+
+// Take ownership of an existing wl_buffer and track its release
+bool sweetbg_buffer_wrap(struct sweetbg_buffer *buffer,
+	struct wl_buffer *wl_buffer, uint32_t width, uint32_t height);
 
 // Fill every pixel with one XRGB8888 color (0x00RRGGBB)
 void sweetbg_buffer_fill(struct sweetbg_buffer *buffer, uint32_t color);

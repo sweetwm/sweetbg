@@ -5,6 +5,7 @@
 #include <wayland-client.h>
 
 #include "fractional-scale-v1-client-protocol.h"
+#include "single-pixel-buffer-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "wayland/output.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
@@ -15,6 +16,7 @@
 #define SHM_VERSION 1
 #define VIEWPORTER_VERSION 1
 #define FRACTIONAL_SCALE_VERSION 1
+#define SINGLE_PIXEL_BUFFER_VERSION 1
 #define XDG_OUTPUT_MANAGER_MAX_VERSION 3
 
 static uint32_t min_u32(uint32_t a, uint32_t b) {
@@ -55,6 +57,12 @@ static void handle_global(void *data, struct wl_registry *registry,
 		reg->fractional_scale_manager = wl_registry_bind(registry, name,
 			&wp_fractional_scale_manager_v1_interface,
 			FRACTIONAL_SCALE_VERSION);
+	} else if (strcmp(interface,
+			   wp_single_pixel_buffer_manager_v1_interface.name) ==
+		   0) {
+		reg->single_pixel_buffer_manager = wl_registry_bind(registry,
+			name, &wp_single_pixel_buffer_manager_v1_interface,
+			SINGLE_PIXEL_BUFFER_VERSION);
 	} else if (strcmp(interface, zxdg_output_manager_v1_interface.name) ==
 		   0) {
 		reg->xdg_output_manager = wl_registry_bind(registry, name,
@@ -91,6 +99,7 @@ bool sweetbg_registry_init(
 	reg->layer_shell = NULL;
 	reg->viewporter = NULL;
 	reg->fractional_scale_manager = NULL;
+	reg->single_pixel_buffer_manager = NULL;
 	reg->xdg_output_manager = NULL;
 	reg->layout_dirty = false;
 	wl_list_init(&reg->outputs);
@@ -150,6 +159,11 @@ void sweetbg_registry_finish(struct sweetbg_registry *reg) {
 		wp_fractional_scale_manager_v1_destroy(
 			reg->fractional_scale_manager);
 		reg->fractional_scale_manager = NULL;
+	}
+	if (reg->single_pixel_buffer_manager != NULL) {
+		wp_single_pixel_buffer_manager_v1_destroy(
+			reg->single_pixel_buffer_manager);
+		reg->single_pixel_buffer_manager = NULL;
 	}
 	if (reg->viewporter != NULL) {
 		wp_viewporter_destroy(reg->viewporter);

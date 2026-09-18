@@ -7,6 +7,7 @@
 struct zwlr_layer_shell_v1;
 struct wp_viewporter;
 struct wp_fractional_scale_manager_v1;
+struct wp_single_pixel_buffer_manager_v1;
 struct zxdg_output_manager_v1;
 
 struct sweetbg_registry {
@@ -16,6 +17,7 @@ struct sweetbg_registry {
 	struct zwlr_layer_shell_v1 *layer_shell;
 	struct wp_viewporter *viewporter;
 	struct wp_fractional_scale_manager_v1 *fractional_scale_manager;
+	struct wp_single_pixel_buffer_manager_v1 *single_pixel_buffer_manager;
 	struct zxdg_output_manager_v1 *xdg_output_manager;
 	struct wl_list outputs;
 	bool layout_dirty;

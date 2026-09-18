@@ -18,6 +18,24 @@ static const struct wl_buffer_listener buffer_listener = {
 	.release = handle_release,
 };
 
+bool sweetbg_buffer_wrap(struct sweetbg_buffer *buffer,
+	struct wl_buffer *wl_buffer, uint32_t width, uint32_t height) {
+	buffer->wl_buffer = wl_buffer;
+	buffer->data = NULL;
+	buffer->size = 0;
+	buffer->width = width;
+	buffer->height = height;
+	buffer->released = false;
+	buffer->next = NULL;
+
+	if (wl_buffer == NULL || wl_buffer_add_listener(wl_buffer,
+					 &buffer_listener, buffer) != 0) {
+		buffer->wl_buffer = NULL;
+		return false;
+	}
+	return true;
+}
+
 static bool buffer_size(uint32_t width, uint32_t height, uint32_t *stride_out,
 	size_t *size_out) {
 	if (width == 0 || height == 0) {

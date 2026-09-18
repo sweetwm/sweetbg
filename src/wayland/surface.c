@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "fractional-scale-v1-client-protocol.h"
+#include "single-pixel-buffer-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
@@ -73,9 +74,11 @@ bool sweetbg_surface_create(struct sweetbg_surface *surface,
 		return false;
 	}
 
-	if (viewporter != NULL && fractional_manager != NULL) {
+	if (viewporter != NULL) {
 		surface->viewport = wp_viewporter_get_viewport(
 			viewporter, surface->wl_surface);
+	}
+	if (surface->viewport != NULL && fractional_manager != NULL) {
 		surface->fractional =
 			wp_fractional_scale_manager_v1_get_fractional_scale(
 				fractional_manager, surface->wl_surface);
@@ -89,8 +92,7 @@ bool sweetbg_surface_create(struct sweetbg_surface *surface,
 		layer_shell, surface->wl_surface, output,
 		ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, BACKGROUND_NAMESPACE);
 	if (surface->layer_surface == NULL) {
-		wl_surface_destroy(surface->wl_surface);
-		surface->wl_surface = NULL;
+		sweetbg_surface_destroy(surface);
 		return false;
 	}
 
@@ -160,7 +162,7 @@ static bool prepare_buffer(struct sweetbg_surface *surface, struct wl_shm *shm,
 
 static void present(struct sweetbg_surface *surface, int32_t scale,
 	uint32_t pixel_width, uint32_t pixel_height) {
-	if (surface->viewport != NULL && surface->fractional_scale > 0) {
+	if (surface->viewport != NULL) {
 		wl_surface_set_buffer_scale(surface->wl_surface, 1);
 		wp_viewport_set_destination(surface->viewport,
 			(int32_t)surface->width, (int32_t)surface->height);
@@ -179,10 +181,49 @@ static void present(struct sweetbg_surface *surface, int32_t scale,
 }
 
 bool sweetbg_surface_paint_color(struct sweetbg_surface *surface,
-	struct wl_shm *shm, int32_t scale, uint32_t color) {
+	struct wl_shm *shm,
+	struct wp_single_pixel_buffer_manager_v1 *single_pixel_manager,
+	int32_t scale, uint32_t color) {
+	if (!surface->configured || surface->wl_surface == NULL) {
+		return false;
+	}
+
+	if (surface->viewport != NULL && single_pixel_manager != NULL) {
+		uint32_t r = ((color >> 16) & 0xffu) * 0x01010101u;
+		uint32_t g = ((color >> 8) & 0xffu) * 0x01010101u;
+		uint32_t b = (color & 0xffu) * 0x01010101u;
+		struct wl_buffer *wl_buffer =
+			wp_single_pixel_buffer_manager_v1_create_u32_rgba_buffer(
+				single_pixel_manager, r, g, b, UINT32_MAX);
+		struct sweetbg_buffer *buffer = calloc(1, sizeof(*buffer));
+		if (buffer == NULL ||
+			!sweetbg_buffer_wrap(buffer, wl_buffer, 1, 1)) {
+			if (wl_buffer != NULL) {
+				wl_buffer_destroy(wl_buffer);
+			}
+			free(buffer);
+			return false;
+		}
+		retire_buffer(surface);
+		surface->buffer = buffer;
+		present(surface, scale, 1, 1);
+		return true;
+	}
+
 	uint32_t pw;
 	uint32_t ph;
-	if (!prepare_buffer(surface, shm, scale, &pw, &ph)) {
+	if (surface->viewport != NULL) {
+		pw = 1;
+		ph = 1;
+		struct sweetbg_buffer *buffer = calloc(1, sizeof(*buffer));
+		if (buffer == NULL ||
+			!sweetbg_buffer_create(buffer, shm, pw, ph)) {
+			free(buffer);
+			return false;
+		}
+		retire_buffer(surface);
+		surface->buffer = buffer;
+	} else if (!prepare_buffer(surface, shm, scale, &pw, &ph)) {
 		return false;
 	}
 	sweetbg_buffer_fill(surface->buffer, color);

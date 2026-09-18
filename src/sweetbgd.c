@@ -332,7 +332,9 @@ static void reconcile_paint(struct daemon *daemon) {
 		const char *path = effective_path(daemon, output);
 		if (path[0] == '\0') {
 			sweetbg_surface_paint_color(&output->surface,
-				daemon->reg->shm, output->scale, daemon->color);
+				daemon->reg->shm,
+				daemon->reg->single_pixel_buffer_manager,
+				output->scale, daemon->color);
 		} else {
 			output->surface.needs_repaint = false;
 			spawn_prepare(output->name, path);

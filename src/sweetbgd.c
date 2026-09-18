@@ -1020,7 +1020,29 @@ static int install_signal_handling(void) {
 	return fd;
 }
 
-static void run_loop(
+static bool report_wayland_disconnect(struct wl_display *display) {
+	int err = wl_display_get_error(display);
+	if (err == EPROTO) {
+		const struct wl_interface *interface = NULL;
+		uint32_t id = 0;
+		uint32_t code =
+			wl_display_get_protocol_error(display, &interface, &id);
+		fprintf(stderr,
+			"sweetbgd: wayland protocol error %u on %s@%u\n", code,
+			interface != NULL ? interface->name : "?", id);
+		return false;
+	}
+
+	if (err != 0) {
+		fprintf(stderr, "sweetbgd: lost the wayland connection: %s\n",
+			strerror(err));
+	} else {
+		fprintf(stderr, "sweetbgd: lost the wayland connection\n");
+	}
+	return true;
+}
+
+static bool run_loop(
 	struct daemon *daemon, struct sweetbg_ipc_server *ipc, int signal_fd) {
 	struct wl_display *display = daemon->display;
 	struct pollfd fds[3];
@@ -1034,7 +1056,9 @@ static void run_loop(
 	bool running = true;
 	while (running) {
 		while (wl_display_prepare_read(display) != 0) {
-			wl_display_dispatch_pending(display);
+			if (wl_display_dispatch_pending(display) < 0) {
+				return report_wayland_disconnect(display);
+			}
 		}
 		wl_display_flush(display);
 
@@ -1043,23 +1067,29 @@ static void run_loop(
 			if (errno == EINTR) {
 				continue;
 			}
-			break;
+			fprintf(stderr, "sweetbgd: poll failed: %s\n",
+				strerror(errno));
+			return false;
 		}
 
 		if ((fds[0].revents & POLLIN) != 0) {
 			if (wl_display_read_events(display) < 0) {
-				break;
+				return report_wayland_disconnect(display);
 			}
 		} else {
 			wl_display_cancel_read(display);
 		}
 		if (wl_display_dispatch_pending(display) < 0) {
-			break;
+			return report_wayland_disconnect(display);
 		}
 		short bad = POLLERR | POLLHUP | POLLNVAL;
-		if ((fds[0].revents & bad) != 0 ||
-			(fds[1].revents & bad) != 0) {
-			break;
+		if ((fds[0].revents & bad) != 0) {
+			return report_wayland_disconnect(display);
+		}
+		if ((fds[1].revents & bad) != 0) {
+			fprintf(stderr,
+				"sweetbgd: control socket poll failure\n");
+			return false;
 		}
 
 		if ((fds[2].revents & POLLIN) != 0) {
@@ -1081,6 +1111,7 @@ static void run_loop(
 			}
 		}
 	}
+	return true;
 }
 
 static void report_outputs(struct sweetbg_registry *reg) {
@@ -1211,9 +1242,9 @@ static bool serve(struct wl_display *display, struct sweetbg_ipc_server *ipc,
 		return false;
 	}
 
-	run_loop(&daemon, ipc, signal_fd);
+	bool ok = run_loop(&daemon, ipc, signal_fd);
 	sweetbg_registry_finish(&reg);
-	return true;
+	return ok;
 }
 
 static int run(void) {

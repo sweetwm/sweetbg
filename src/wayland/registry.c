@@ -142,6 +142,10 @@ bool sweetbg_registry_init(
 
 void sweetbg_registry_finish(struct sweetbg_registry *reg) {
 	sweetbg_outputs_finish(&reg->outputs);
+	if (reg->xdg_output_manager != NULL) {
+		zxdg_output_manager_v1_destroy(reg->xdg_output_manager);
+		reg->xdg_output_manager = NULL;
+	}
 	if (reg->fractional_scale_manager != NULL) {
 		wp_fractional_scale_manager_v1_destroy(
 			reg->fractional_scale_manager);

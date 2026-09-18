@@ -1,6 +1,7 @@
 #include "config/config_write.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -403,35 +404,88 @@ static bool ensure_parent_dir(const char *path, char *err, size_t err_size) {
 	return true;
 }
 
+static bool write_all(int fd, const char *data, size_t len) {
+	size_t written = 0;
+	while (written < len) {
+		ssize_t n = write(fd, data + written, len - written);
+		if (n < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			return false;
+		}
+		if (n == 0) {
+			errno = EIO;
+			return false;
+		}
+		written += (size_t)n;
+	}
+	return true;
+}
+
 static bool write_atomic(
 	const char *path, const char *data, char *err, size_t err_size) {
 	if (!ensure_parent_dir(path, err, err_size)) {
 		return false;
 	}
+
+	char resolved[PATH_MAX];
+	const char *target = realpath(path, resolved);
+	if (target == NULL) {
+		int resolve_errno = errno;
+		struct stat lst;
+		if (lstat(path, &lst) == 0 && S_ISLNK(lst.st_mode)) {
+			snprintf(err, err_size,
+				"%s: cannot resolve symlink: %s", path,
+				strerror(resolve_errno));
+			return false;
+		}
+		target = path;
+	}
+
+	struct stat st;
+	bool preserve_mode = stat(target, &st) == 0;
+	if (!preserve_mode && errno != ENOENT) {
+		snprintf(err, err_size, "%s: %s", target, strerror(errno));
+		return false;
+	}
+
 	char tmp[PATH_MAX];
-	int n = snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+	int n = snprintf(tmp, sizeof(tmp), "%s.XXXXXX", target);
 	if (n <= 0 || (size_t)n >= sizeof(tmp)) {
 		snprintf(err, err_size, "config path is too long");
 		return false;
 	}
-	FILE *fp = fopen(tmp, "w");
-	if (fp == NULL) {
+	int fd = mkostemp(tmp, O_CLOEXEC);
+	if (fd < 0) {
 		snprintf(err, err_size, "%s: %s", tmp, strerror(errno));
 		return false;
 	}
+
 	size_t len = strlen(data);
-	bool ok = fwrite(data, 1, len, fp) == len && fflush(fp) == 0;
-	if (fclose(fp) != 0) {
+	bool ok = write_all(fd, data, len);
+	if (ok && preserve_mode && fchmod(fd, st.st_mode & 07777) != 0) {
 		ok = false;
+	}
+	if (ok && fsync(fd) != 0) {
+		ok = false;
+	}
+	int saved_errno = errno;
+	if (close(fd) != 0 && ok) {
+		ok = false;
+		saved_errno = errno;
 	}
 	if (!ok) {
 		unlink(tmp);
-		snprintf(err, err_size, "failed to write %s", tmp);
+		snprintf(err, err_size, "failed to write %s: %s", tmp,
+			strerror(saved_errno));
 		return false;
 	}
-	if (rename(tmp, path) != 0) {
-		snprintf(err, err_size, "%s: %s", path, strerror(errno));
+	if (rename(tmp, target) != 0) {
+		saved_errno = errno;
 		unlink(tmp);
+		snprintf(
+			err, err_size, "%s: %s", target, strerror(saved_errno));
 		return false;
 	}
 	return true;

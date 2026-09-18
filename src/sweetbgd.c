@@ -287,6 +287,8 @@ static void spawn_prepare(const char *name, const char *path) {
 		char bin[PATH_MAX];
 		client_binary(bin, sizeof(bin));
 		execlp(bin, "sweetbg", "prepare", name, path, (char *)NULL);
+		fprintf(stderr, "sweetbgd: cannot execute %s: %s\n", bin,
+			strerror(errno));
 		_exit(127);
 	}
 }
@@ -320,6 +322,13 @@ static void spread_span_repaint(struct daemon *daemon) {
 	daemon->reg->layout_dirty = false;
 }
 
+static void paint_background(
+	struct daemon *daemon, struct sweetbg_output *output) {
+	sweetbg_surface_paint_color(&output->surface, daemon->reg->shm,
+		daemon->reg->single_pixel_buffer_manager, output->scale,
+		daemon->color);
+}
+
 static void reconcile_paint(struct daemon *daemon) {
 	spread_span_repaint(daemon);
 
@@ -331,11 +340,11 @@ static void reconcile_paint(struct daemon *daemon) {
 		}
 		const char *path = effective_path(daemon, output);
 		if (path[0] == '\0') {
-			sweetbg_surface_paint_color(&output->surface,
-				daemon->reg->shm,
-				daemon->reg->single_pixel_buffer_manager,
-				output->scale, daemon->color);
+			paint_background(daemon, output);
 		} else {
+			if (!output->surface.has_content) {
+				paint_background(daemon, output);
+			}
 			output->surface.needs_repaint = false;
 			spawn_prepare(output->name, path);
 		}

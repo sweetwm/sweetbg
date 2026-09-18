@@ -22,6 +22,11 @@ Unix-domain socket. Run it from a session startup script, your compositor's
 (_systemctl --user enable --now sweetbgd.service_). It runs in the foreground
 until it receives a *stop* request or is terminated.
 
+The background color is shown while an output's first configured wallpaper is
+being prepared. If that preparation fails, the color remains visible. A failed
+repaint on an output that already has content leaves the previous content in
+place.
+
 When the compositor supports the *wp_viewporter* and *wp_fractional_scale_v1*
 protocols, *sweetbgd* renders each wallpaper at the output's exact device
 resolution and maps it down through a viewport, so wallpapers stay sharp on

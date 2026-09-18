@@ -23,6 +23,7 @@ struct sweetbg_surface {
 	uint32_t height;
 	bool configured;
 	bool needs_repaint;
+	bool has_content;
 	struct sweetbg_buffer *buffer;
 	struct sweetbg_buffer *retired_buffers;
 	struct wp_viewport *viewport;

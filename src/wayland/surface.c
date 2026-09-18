@@ -63,6 +63,7 @@ bool sweetbg_surface_create(struct sweetbg_surface *surface,
 	surface->height = 0;
 	surface->configured = false;
 	surface->needs_repaint = false;
+	surface->has_content = false;
 	surface->buffer = NULL;
 	surface->retired_buffers = NULL;
 	surface->viewport = NULL;
@@ -178,6 +179,7 @@ static void present(struct sweetbg_surface *surface, int32_t scale,
 		(int32_t)pixel_width, (int32_t)pixel_height);
 	wl_surface_commit(surface->wl_surface);
 	surface->needs_repaint = false;
+	surface->has_content = true;
 }
 
 bool sweetbg_surface_paint_color(struct sweetbg_surface *surface,
@@ -325,4 +327,5 @@ void sweetbg_surface_destroy(struct sweetbg_surface *surface) {
 		free_buffer(buffer);
 	}
 	surface->configured = false;
+	surface->has_content = false;
 }

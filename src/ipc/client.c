@@ -383,7 +383,21 @@ static int send_prepared(const struct output_info *out, uint32_t mode,
 	return 0;
 }
 
-int sweetbg_client_set_image(const char *path, const char *output) {
+static bool output_requested(const char *name, const char *output,
+	const char *const *names, size_t name_count) {
+	if (names == NULL) {
+		return output == NULL || strcmp(name, output) == 0;
+	}
+	for (size_t i = 0; i < name_count; i++) {
+		if (strcmp(name, names[i]) == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static int prepare_outputs(const char *path, const char *output,
+	const char *const *names, size_t name_count, uint32_t mode) {
 	struct output_info outputs[MAX_OUTPUTS];
 	enum sweetbg_fit fit;
 	uint32_t color;
@@ -393,8 +407,21 @@ int sweetbg_client_set_image(const char *path, const char *output) {
 	if (count < 0) {
 		return 1;
 	}
-	if (count == 0) {
+	if (count == 0 && mode != SWEETBG_IMG_REPAINT) {
 		fprintf(stderr, "sweetbg: daemon has no configured outputs\n");
+		return 1;
+	}
+	int selected = 0;
+	for (int i = 0; i < count; i++) {
+		selected += output_requested(
+			outputs[i].name, output, names, name_count);
+	}
+	if (selected == 0) {
+		if (mode == SWEETBG_IMG_REPAINT) {
+			// The requested outputs went away between spawn and now
+			return 0;
+		}
+		fprintf(stderr, "sweetbg: no output named %s\n", output);
 		return 1;
 	}
 
@@ -413,12 +440,11 @@ int sweetbg_client_set_image(const char *path, const char *output) {
 	// already computed, so this costs nothing extra
 	uint32_t fill = color_auto && color_count > 0 ? colors[0] : color;
 
-	uint32_t mode =
-		output == NULL ? SWEETBG_IMG_DEFAULT : SWEETBG_IMG_OVERRIDE;
 	int rc = 0;
 	int applied = 0;
 	for (int i = 0; i < count; i++) {
-		if (output != NULL && strcmp(outputs[i].name, output) != 0) {
+		if (!output_requested(
+			    outputs[i].name, output, names, name_count)) {
 			continue;
 		}
 		int memfd = prepare_memfd(&image, outputs, count, i, fill);
@@ -438,62 +464,25 @@ int sweetbg_client_set_image(const char *path, const char *output) {
 	}
 	sweetbg_image_free(&image);
 
-	if (output != NULL && applied == 0 && rc == 0) {
-		fprintf(stderr, "sweetbg: no output named %s\n", output);
-		return 1;
-	}
-	if (applied > 0) {
+	if (mode != SWEETBG_IMG_REPAINT && applied > 0) {
 		printf("applied %s%s%s\n", path, output != NULL ? " to " : "",
 			output != NULL ? output : "");
 	}
 	return rc;
 }
 
+int sweetbg_client_set_image(const char *path, const char *output) {
+	uint32_t mode =
+		output == NULL ? SWEETBG_IMG_DEFAULT : SWEETBG_IMG_OVERRIDE;
+	return prepare_outputs(path, output, NULL, 0, mode);
+}
+
 int sweetbg_client_prepare_output(const char *name, const char *path) {
-	struct output_info outputs[MAX_OUTPUTS];
-	enum sweetbg_fit fit;
-	uint32_t color;
-	bool color_auto;
-	int count =
-		query_outputs(outputs, MAX_OUTPUTS, &fit, &color, &color_auto);
-	if (count < 0) {
-		return 1;
-	}
+	return sweetbg_client_prepare_outputs(path, &name, 1);
+}
 
-	const struct output_info *target = NULL;
-	int index = -1;
-	for (int i = 0; i < count; i++) {
-		if (strcmp(outputs[i].name, name) == 0) {
-			target = &outputs[i];
-			index = i;
-			break;
-		}
-	}
-	if (target == NULL) {
-		// The output went away between spawn and now; nothing to do
-		return 0;
-	}
-
-	struct sweetbg_image image;
-	char err[128];
-	if (!sweetbg_image_load(&image, path, err, sizeof(err))) {
-		fprintf(stderr, "sweetbg: %s\n", err);
-		return 1;
-	}
-
-	uint32_t colors[SWEETBG_MAX_PALETTE];
-	size_t color_count;
-	sweetbg_palette_extract(
-		&image, colors, SWEETBG_MAX_PALETTE, &color_count);
-	uint32_t fill = color_auto && color_count > 0 ? colors[0] : color;
-
-	int memfd = prepare_memfd(&image, outputs, count, index, fill);
-	int rc = 1;
-	if (memfd >= 0) {
-		rc = send_prepared(target, SWEETBG_IMG_REPAINT, path, memfd,
-			colors, color_count);
-		close(memfd);
-	}
-	sweetbg_image_free(&image);
-	return rc;
+int sweetbg_client_prepare_outputs(
+	const char *path, const char *const *names, size_t name_count) {
+	return prepare_outputs(
+		path, NULL, names, name_count, SWEETBG_IMG_REPAINT);
 }

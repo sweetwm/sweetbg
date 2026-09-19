@@ -468,7 +468,6 @@ int main(int argc, char **argv) {
 	if (strcmp(cmd, "clear") == 0) {
 		return cmd_clear(argc, argv);
 	}
-
 	if (strcmp(cmd, "prepare") == 0) {
 		if (argc < 4) {
 			fprintf(stderr,
@@ -477,7 +476,15 @@ int main(int argc, char **argv) {
 		}
 		return sweetbg_client_prepare_output(argv[2], argv[3]);
 	}
-
+	if (strcmp(cmd, "prepare-set") == 0) {
+		if (argc < 4) {
+			fprintf(stderr, "usage: sweetbg prepare-set <path> "
+					"<output>...\n");
+			return 2;
+		}
+		return sweetbg_client_prepare_outputs(argv[2],
+			(const char *const *)&argv[3], (size_t)(argc - 3));
+	}
 	if (strcmp(cmd, "query") == 0) {
 		return cmd_query(argc, argv);
 	}

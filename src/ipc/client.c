@@ -11,12 +11,9 @@
 #include <unistd.h>
 
 #include "image/image.h"
-#include "image/layout.h"
 #include "image/palette.h"
 #include "ipc/prepared.h"
 #include "ipc/protocol.h"
-
-#define MAX_OUTPUTS 64
 
 #define REPLY_TIMEOUT_SECONDS 5
 
@@ -116,18 +113,7 @@ int sweetbg_client_raw_request(uint8_t command, const void *payload,
 	return 0;
 }
 
-struct output_info {
-	char name[64];
-	uint32_t width;
-	uint32_t height;
-	uint32_t generation;
-	int32_t scale;
-	enum sweetbg_fit fit;
-	bool has_generation;
-	struct sweetbg_layout_output logical;
-};
-
-static int query_outputs(struct output_info *list, int max,
+static int query_outputs(struct sweetbg_output_info *list, int max,
 	enum sweetbg_fit *fit, uint32_t *color, bool *color_auto) {
 	*fit = SWEETBG_FIT_COVER;
 	*color = 0;
@@ -251,44 +237,7 @@ static int query_outputs(struct output_info *list, int max,
 	return count;
 }
 
-static bool span_placement(const struct sweetbg_image *image,
-	const struct output_info *list, int count, int index, uint32_t width,
-	uint32_t height, struct sweetbg_placement *out) {
-	struct sweetbg_layout_output boxes[MAX_OUTPUTS];
-	for (int i = 0; i < count; i++) {
-		boxes[i] = list[i].logical;
-	}
-
-	uint32_t layout_w;
-	uint32_t layout_h;
-	struct sweetbg_rect slice;
-	if (!sweetbg_layout_slice(boxes, (size_t)count, (size_t)index,
-		    &layout_w, &layout_h, &slice)) {
-		return false;
-	}
-
-	sweetbg_span_rects(image->width, image->height, layout_w, layout_h,
-		&slice, width, height, out);
-	return true;
-}
-
-static int prepare_memfd(const struct sweetbg_image *image,
-	const struct output_info *list, int count, int index, uint32_t color) {
-	struct sweetbg_placement place;
-	const struct sweetbg_placement *placement = NULL;
-	enum sweetbg_fit fit = list[index].fit;
-	if (fit == SWEETBG_FIT_SPAN &&
-		span_placement(image, list, count, index, list[index].width,
-			list[index].height, &place)) {
-		placement = &place;
-	} else if (fit == SWEETBG_FIT_SPAN) {
-		fit = SWEETBG_FIT_COVER;
-	}
-	return sweetbg_prepared_buffer_create(image, fit, list[index].width,
-		list[index].height, color, placement);
-}
-
-static int send_prepared(const struct output_info *out, uint32_t mode,
+static int send_prepared(const struct sweetbg_output_info *out, uint32_t mode,
 	const char *path, int memfd, const uint32_t *colors,
 	size_t color_count) {
 	size_t name_len = strlen(out->name);
@@ -378,12 +327,12 @@ static bool output_skipped(
 static int prepare_outputs(const char *path, const char *output,
 	const char *const *names, size_t name_count,
 	const char *const *skip_names, size_t skip_count, uint32_t mode) {
-	struct output_info outputs[MAX_OUTPUTS];
+	struct sweetbg_output_info outputs[SWEETBG_MAX_OUTPUTS];
 	enum sweetbg_fit fit;
 	uint32_t color;
 	bool color_auto;
-	int count =
-		query_outputs(outputs, MAX_OUTPUTS, &fit, &color, &color_auto);
+	int count = query_outputs(
+		outputs, SWEETBG_MAX_OUTPUTS, &fit, &color, &color_auto);
 	if (count < 0) {
 		return 1;
 	}
@@ -391,12 +340,14 @@ static int prepare_outputs(const char *path, const char *output,
 		fprintf(stderr, "sweetbg: daemon has no configured outputs\n");
 		return 1;
 	}
+	bool selected_outputs[SWEETBG_MAX_OUTPUTS] = {false};
 	int selected = 0;
 	for (int i = 0; i < count; i++) {
-		selected += output_requested(outputs[i].name, output, names,
-				    name_count) &&
-			    !output_skipped(
-				    outputs[i].name, skip_names, skip_count);
+		selected_outputs[i] = output_requested(outputs[i].name, output,
+					      names, name_count) &&
+				      !output_skipped(outputs[i].name,
+					      skip_names, skip_count);
+		selected += selected_outputs[i];
 	}
 	// A DEFAULT frame also carries the state update. If every current
 	// output has an override, use one as a carrier and replace it afterward
@@ -404,6 +355,9 @@ static int prepare_outputs(const char *path, const char *output,
 		selected == 0 && mode == SWEETBG_IMG_DEFAULT && count > 0 ? 0
 									  : -1;
 	selected += state_carrier >= 0;
+	if (state_carrier >= 0) {
+		selected_outputs[state_carrier] = true;
+	}
 	if (selected == 0) {
 		if (mode == SWEETBG_IMG_REPAINT) {
 			// The requested outputs went away between spawn and now
@@ -413,9 +367,21 @@ static int prepare_outputs(const char *path, const char *output,
 		return 1;
 	}
 
+	struct sweetbg_decode_target targets[SWEETBG_MAX_OUTPUTS];
+	size_t target_count = 0;
+	for (int i = 0; i < count; i++) {
+		if (selected_outputs[i]) {
+			sweetbg_prepared_decode_target(
+				&targets[target_count++], outputs, count, i);
+		}
+	}
+	const struct sweetbg_image_load_options options = {
+		.targets = targets,
+		.target_count = target_count,
+	};
 	struct sweetbg_image image;
 	char err[128];
-	if (!sweetbg_image_load(&image, path, err, sizeof(err))) {
+	if (!sweetbg_image_load(&image, path, &options, err, sizeof(err))) {
 		fprintf(stderr, "sweetbg: %s\n", err);
 		return 1;
 	}
@@ -428,23 +394,20 @@ static int prepare_outputs(const char *path, const char *output,
 	// already computed, so this costs nothing extra
 	uint32_t fill = color_auto && color_count > 0 ? colors[0] : color;
 
-	struct sweetbg_prepared_buffer buffers[MAX_OUTPUTS];
+	struct sweetbg_prepared_buffer buffers[SWEETBG_MAX_OUTPUTS];
 	size_t buffer_count = 0;
 	int rc = 0;
 	int applied = 0;
 	for (int i = 0; i < count; i++) {
-		if (i != state_carrier &&
-			(!output_requested(
-				 outputs[i].name, output, names, name_count) ||
-				output_skipped(outputs[i].name, skip_names,
-					skip_count))) {
+		if (!selected_outputs[i]) {
 			continue;
 		}
 		int memfd = sweetbg_prepared_buffer_find(buffers, buffer_count,
 			outputs[i].width, outputs[i].height, outputs[i].fit);
 		bool reusable = memfd >= 0;
 		if (!reusable) {
-			memfd = prepare_memfd(&image, outputs, count, i, fill);
+			memfd = sweetbg_prepared_buffer_for_output(
+				&image, outputs, count, i, fill);
 		}
 		if (memfd < 0) {
 			fprintf(stderr, "sweetbg: failed to prepare %s\n",

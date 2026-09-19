@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "config/config.h"
+#include "image/decode_scale.h"
 #include "image/fit.h"
 
 struct sweetbg_image {
@@ -14,7 +15,8 @@ struct sweetbg_image {
 	uint8_t *pixels;
 };
 
-bool sweetbg_image_load(struct sweetbg_image *img, const char *path, char *err,
+bool sweetbg_image_load(struct sweetbg_image *img, const char *path,
+	const struct sweetbg_image_load_options *options, char *err,
 	size_t err_size);
 
 // Free decoded pixels. Idempotent

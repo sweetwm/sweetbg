@@ -1,5 +1,6 @@
 #include "ipc/prepared.h"
 
+#include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -53,4 +54,65 @@ int sweetbg_prepared_buffer_find(const struct sweetbg_prepared_buffer *buffers,
 		}
 	}
 	return -1;
+}
+
+static bool span_layout(const struct sweetbg_output_info *outputs, int count,
+	int index, uint32_t *layout_width, uint32_t *layout_height,
+	struct sweetbg_rect *slice) {
+	if (count < 1 || count > SWEETBG_MAX_OUTPUTS || index < 0 ||
+		index >= count) {
+		return false;
+	}
+	struct sweetbg_layout_output boxes[SWEETBG_MAX_OUTPUTS];
+	for (int i = 0; i < count; i++) {
+		boxes[i] = outputs[i].logical;
+	}
+	return sweetbg_layout_slice(boxes, (size_t)count, (size_t)index,
+		layout_width, layout_height, slice);
+}
+
+static bool span_placement(const struct sweetbg_image *image,
+	const struct sweetbg_output_info *outputs, int count, int index,
+	struct sweetbg_placement *out) {
+	uint32_t layout_width;
+	uint32_t layout_height;
+	struct sweetbg_rect slice;
+	if (!span_layout(outputs, count, index, &layout_width, &layout_height,
+		    &slice)) {
+		return false;
+	}
+	sweetbg_span_rects(image->width, image->height, layout_width,
+		layout_height, &slice, outputs[index].width,
+		outputs[index].height, out);
+	return true;
+}
+
+int sweetbg_prepared_buffer_for_output(const struct sweetbg_image *image,
+	const struct sweetbg_output_info *outputs, int output_count, int index,
+	uint32_t color) {
+	struct sweetbg_placement place;
+	const struct sweetbg_placement *placement = NULL;
+	enum sweetbg_fit fit = outputs[index].fit;
+	if (fit == SWEETBG_FIT_SPAN &&
+		span_placement(image, outputs, output_count, index, &place)) {
+		placement = &place;
+	} else if (fit == SWEETBG_FIT_SPAN) {
+		fit = SWEETBG_FIT_COVER;
+	}
+	return sweetbg_prepared_buffer_create(image, fit, outputs[index].width,
+		outputs[index].height, color, placement);
+}
+
+void sweetbg_prepared_decode_target(struct sweetbg_decode_target *target,
+	const struct sweetbg_output_info *outputs, int output_count,
+	int index) {
+	memset(target, 0, sizeof(*target));
+	target->fit = outputs[index].fit;
+	target->width = outputs[index].width;
+	target->height = outputs[index].height;
+	if (target->fit == SWEETBG_FIT_SPAN) {
+		(void)span_layout(outputs, output_count, index,
+			&target->layout_width, &target->layout_height,
+			&target->slice);
+	}
 }

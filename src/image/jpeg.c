@@ -16,8 +16,9 @@ static void on_error(j_common_ptr cinfo) {
 	longjmp(guard->jmp, 1);
 }
 
-bool sweetbg_decode_jpeg(
-	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size) {
+bool sweetbg_decode_jpeg(FILE *fp, struct sweetbg_image *img,
+	const struct sweetbg_image_load_options *options, char *err,
+	size_t err_size) {
 	struct jpeg_decompress_struct cinfo;
 	struct jpeg_guard guard;
 	cinfo.err = jpeg_std_error(&guard.base);
@@ -43,6 +44,18 @@ bool sweetbg_decode_jpeg(
 	}
 
 	cinfo.out_color_space = JCS_EXT_BGRX;
+	static const unsigned int denominators[] = {8, 4, 2};
+	cinfo.scale_num = 1;
+	for (size_t i = 0; i < sizeof(denominators) / sizeof(denominators[0]);
+		i++) {
+		cinfo.scale_denom = denominators[i];
+		jpeg_calc_output_dimensions(&cinfo);
+		if (sweetbg_decode_targets_fit(
+			    cinfo.output_width, cinfo.output_height, options)) {
+			break;
+		}
+		cinfo.scale_denom = 1;
+	}
 	jpeg_start_decompress(&cinfo);
 
 	uint32_t width = cinfo.output_width;

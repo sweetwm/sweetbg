@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/signalfd.h>
 #include <sys/types.h>
@@ -26,9 +27,8 @@ struct palette {
 
 struct assignment {
 	char name[64];
-	char path[PATH_MAX];
+	char *path;
 	enum sweetbg_fit fit;
-	bool has_image;
 	bool has_fit;
 	struct palette palette;
 };
@@ -42,7 +42,7 @@ struct daemon {
 	uint32_t color;
 	bool color_auto;
 	enum sweetbg_fit fit;
-	char default_path[PATH_MAX];
+	char *default_path;
 	struct palette default_palette;
 	struct assignment assignments[MAX_ASSIGNMENTS];
 	size_t assignment_count;
@@ -99,45 +99,48 @@ static struct assignment *ensure_assignment(
 	return entry;
 }
 
-static void set_image_assignment(
-	struct daemon *daemon, const char *name, const char *path) {
-	struct assignment *entry = ensure_assignment(daemon, name);
-	if (entry == NULL) {
-		return;
-	}
-	snprintf(entry->path, sizeof(entry->path), "%s", path);
-	entry->has_image = true;
-}
-
-static bool set_blank_assignment(struct daemon *daemon, const char *name) {
+static bool set_image_assignment_owned(
+	struct daemon *daemon, const char *name, char **path) {
 	struct assignment *entry = ensure_assignment(daemon, name);
 	if (entry == NULL) {
 		return false;
 	}
-	entry->path[0] = '\0';
-	entry->has_image = true;
+	free(entry->path);
+	entry->path = *path;
+	*path = NULL;
+	return true;
+}
+
+static bool set_blank_assignment(struct daemon *daemon, const char *name) {
+	char *path = strdup("");
+	if (path == NULL || !set_image_assignment_owned(daemon, name, &path)) {
+		free(path);
+		return false;
+	}
 	// A blank output shows no image, so it must report no colours
+	struct assignment *entry = assignment_for(daemon, name);
 	entry->palette.count = 0;
 	return true;
 }
 
-static void set_fit_assignment(
+static bool set_fit_assignment(
 	struct daemon *daemon, const char *name, enum sweetbg_fit fit) {
 	struct assignment *entry = ensure_assignment(daemon, name);
 	if (entry == NULL) {
-		return;
+		return false;
 	}
 	entry->fit = fit;
 	entry->has_fit = true;
+	return true;
 }
 
 static bool clear_image_assignment(struct daemon *daemon, const char *name) {
 	struct assignment *entry = assignment_for(daemon, name);
-	if (entry == NULL || !entry->has_image) {
+	if (entry == NULL || entry->path == NULL) {
 		return false;
 	}
-	entry->has_image = false;
-	entry->path[0] = '\0';
+	free(entry->path);
+	entry->path = NULL;
 	compact_assignments(daemon);
 	return true;
 }
@@ -155,12 +158,14 @@ static bool clear_fit_assignment(struct daemon *daemon, const char *name) {
 static void compact_assignments(struct daemon *daemon) {
 	size_t out = 0;
 	for (size_t i = 0; i < daemon->assignment_count; i++) {
-		if (!daemon->assignments[i].has_image &&
+		if (daemon->assignments[i].path == NULL &&
 			!daemon->assignments[i].has_fit) {
 			continue;
 		}
 		if (out != i) {
 			daemon->assignments[out] = daemon->assignments[i];
+			memset(&daemon->assignments[i], 0,
+				sizeof(daemon->assignments[i]));
 		}
 		out++;
 	}
@@ -169,8 +174,8 @@ static void compact_assignments(struct daemon *daemon) {
 
 static void clear_image_assignments(struct daemon *daemon) {
 	for (size_t i = 0; i < daemon->assignment_count; i++) {
-		daemon->assignments[i].has_image = false;
-		daemon->assignments[i].path[0] = '\0';
+		free(daemon->assignments[i].path);
+		daemon->assignments[i].path = NULL;
 	}
 	compact_assignments(daemon);
 }
@@ -185,6 +190,16 @@ static bool clear_fit_assignments(struct daemon *daemon) {
 	}
 	compact_assignments(daemon);
 	return changed;
+}
+
+static void daemon_free_paths(struct daemon *daemon) {
+	free(daemon->default_path);
+	daemon->default_path = NULL;
+	for (size_t i = 0; i < daemon->assignment_count; i++) {
+		free(daemon->assignments[i].path);
+		daemon->assignments[i].path = NULL;
+	}
+	daemon->assignment_count = 0;
 }
 
 static void collect_buffers(struct sweetbg_registry *reg) {
@@ -215,8 +230,10 @@ static const char *effective_path(
 	const struct daemon *daemon, const struct sweetbg_output *output) {
 	const struct assignment *assigned =
 		const_assignment_for(daemon, output->name);
-	return assigned != NULL && assigned->has_image ? assigned->path
-						       : daemon->default_path;
+	if (assigned != NULL && assigned->path != NULL) {
+		return assigned->path;
+	}
+	return daemon->default_path != NULL ? daemon->default_path : "";
 }
 
 static enum sweetbg_fit effective_fit(
@@ -231,7 +248,7 @@ static const struct palette *effective_palette(
 	const struct daemon *daemon, const struct sweetbg_output *output) {
 	const struct assignment *assigned =
 		const_assignment_for(daemon, output->name);
-	return assigned != NULL && assigned->has_image
+	return assigned != NULL && assigned->path != NULL
 		       ? &assigned->palette
 		       : &daemon->default_palette;
 }
@@ -240,7 +257,7 @@ static void set_effective_palette(struct daemon *daemon, const char *name,
 	const uint32_t *colors, uint8_t count) {
 	struct palette *dst = &daemon->default_palette;
 	struct assignment *assigned = assignment_for(daemon, name);
-	if (assigned != NULL && assigned->has_image) {
+	if (assigned != NULL && assigned->path != NULL) {
 		dst = &assigned->palette;
 	}
 	memset(dst, 0, sizeof(*dst));
@@ -358,7 +375,7 @@ struct prepared_request {
 	uint32_t width;
 	uint32_t height;
 	char name[64];
-	char path[PATH_MAX];
+	char *path;
 	uint32_t colors[SWEETBG_MAX_PALETTE];
 	uint8_t color_count;
 	uint32_t generation;
@@ -390,8 +407,11 @@ static bool parse_prepared(
 	}
 	uint32_t path_len = sweetbg_get_u32(p + off);
 	off += 4;
-	if (path_len == 0 || path_len >= sizeof(req->path) ||
-		off + path_len > len) {
+	if (path_len == 0 || path_len >= PATH_MAX || off + path_len > len) {
+		return false;
+	}
+	req->path = malloc((size_t)path_len + 1);
+	if (req->path == NULL) {
 		return false;
 	}
 	memcpy(req->path, p + off, path_len);
@@ -405,6 +425,8 @@ static bool parse_prepared(
 		uint32_t n = sweetbg_get_u32(p + off);
 		off += 4;
 		if (n > SWEETBG_MAX_PALETTE || off + (size_t)n * 4 > len) {
+			free(req->path);
+			req->path = NULL;
 			return false;
 		}
 		for (uint32_t i = 0; i < n; i++) {
@@ -423,10 +445,11 @@ static bool parse_prepared(
 static uint8_t handle_img_prepared(struct daemon *daemon,
 	const uint8_t *payload, uint32_t len, int fd, char *message,
 	size_t message_size) {
-	struct prepared_request req;
+	struct prepared_request req = {0};
 	if (fd < 0 || !parse_prepared(payload, len, &req) ||
 		req.mode > SWEETBG_IMG_REPAINT) {
 		snprintf(message, message_size, "invalid prepared image");
+		free(req.path);
 		return SWEETBG_STATUS_ERR_BAD_REQUEST;
 	}
 
@@ -441,11 +464,13 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	}
 	if (match == NULL) {
 		snprintf(message, message_size, "no output named %s", req.name);
+		free(req.path);
 		return SWEETBG_STATUS_ERR_BAD_REQUEST;
 	}
 	if (!match->surface.configured) {
 		snprintf(message, message_size, "output %s is not configured",
 			req.name);
+		free(req.path);
 		return SWEETBG_STATUS_ERR_IMAGE;
 	}
 
@@ -458,6 +483,7 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 			"stale prepare for %s: got %ux%u, output wants %ux%u",
 			req.name, req.width, req.height, want_width,
 			want_height);
+		free(req.path);
 		return SWEETBG_STATUS_ERR_IMAGE;
 	}
 
@@ -468,21 +494,40 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 			strcmp(req.path, effective_path(daemon, match)) != 0)) {
 		snprintf(message, message_size, "superseded prepare for %s",
 			req.name);
+		free(req.path);
 		return SWEETBG_STATUS_OK;
+	}
+	if (req.mode == SWEETBG_IMG_OVERRIDE &&
+		assignment_for(daemon, req.name) == NULL &&
+		daemon->assignment_count >= MAX_ASSIGNMENTS) {
+		snprintf(message, message_size, "too many output overrides");
+		free(req.path);
+		return SWEETBG_STATUS_ERR_BAD_REQUEST;
 	}
 
 	if (!sweetbg_surface_attach_prepared(&match->surface, daemon->reg->shm,
 		    match->scale, fd, req.width, req.height)) {
 		snprintf(message, message_size, "could not attach buffer");
+		free(req.path);
 		return SWEETBG_STATUS_ERR_IMAGE;
 	}
 
 	// Update remembered assignments unless this is a daemon-driven repaint
+	const char *applied_path = req.path;
 	if (req.mode == SWEETBG_IMG_DEFAULT) {
-		memcpy(daemon->default_path, req.path, strlen(req.path) + 1);
+		free(daemon->default_path);
+		daemon->default_path = req.path;
+		req.path = NULL;
+		applied_path = daemon->default_path;
 		clear_image_assignments(daemon);
 	} else if (req.mode == SWEETBG_IMG_OVERRIDE) {
-		set_image_assignment(daemon, req.name, req.path);
+		if (!set_image_assignment_owned(daemon, req.name, &req.path)) {
+			snprintf(message, message_size,
+				"could not store output override");
+			free(req.path);
+			return SWEETBG_STATUS_ERR_BAD_REQUEST;
+		}
+		applied_path = assignment_for(daemon, req.name)->path;
 	}
 	if (req.mode != SWEETBG_IMG_REPAINT) {
 		match->generation++;
@@ -492,7 +537,9 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 		match->surface.needs_repaint = true;
 		reconcile_paint(daemon);
 	}
-	snprintf(message, message_size, "applied %s to %s", req.path, req.name);
+	snprintf(message, message_size, "applied %s to %s", applied_path,
+		req.name);
+	free(req.path);
 	return SWEETBG_STATUS_OK;
 }
 
@@ -518,7 +565,7 @@ __attribute__((format(printf, 4, 5))) static void append_line(
 static uint8_t handle_query(
 	struct daemon *daemon, char *message, size_t message_size) {
 	size_t off = 0;
-	if (daemon->default_path[0] != '\0') {
+	if (daemon->default_path != NULL && daemon->default_path[0] != '\0') {
 		append_line(message, message_size, &off, "default: %s\n",
 			daemon->default_path);
 	} else if (daemon->color_auto) {
@@ -539,7 +586,8 @@ static uint8_t handle_query(
 			output->name != NULL ? output->name : "(unnamed)";
 		const struct assignment *assigned =
 			const_assignment_for(daemon, output->name);
-		const bool has_image = assigned != NULL && assigned->has_image;
+		const bool has_image =
+			assigned != NULL && assigned->path != NULL;
 		const bool has_fit = assigned != NULL && assigned->has_fit;
 		if (has_image && has_fit) {
 			if (assigned->path[0] == '\0') {
@@ -605,7 +653,8 @@ static uint8_t handle_query_json(
 
 		const struct assignment *assigned =
 			const_assignment_for(daemon, output->name);
-		const bool has_image = assigned != NULL && assigned->has_image;
+		const bool has_image =
+			assigned != NULL && assigned->path != NULL;
 		const bool has_fit = assigned != NULL && assigned->has_fit;
 		const bool blank = has_image && assigned->path[0] == '\0';
 		const char *path =
@@ -787,7 +836,11 @@ static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 			}
 			enum sweetbg_fit old_fit =
 				effective_fit(daemon, output);
-			set_fit_assignment(daemon, req.output, fit);
+			if (!set_fit_assignment(daemon, req.output, fit)) {
+				snprintf(message, message_size,
+					"too many output overrides");
+				return SWEETBG_STATUS_ERR_BAD_REQUEST;
+			}
 			repaint_output_after_fit(daemon, output, old_fit);
 			snprintf(message, message_size, "fit %s for %s",
 				sweetbg_fit_name(fit), req.output);
@@ -867,7 +920,7 @@ static bool parse_clear(
 
 static bool any_image_assignment(const struct daemon *daemon) {
 	for (size_t i = 0; i < daemon->assignment_count; i++) {
-		if (daemon->assignments[i].has_image) {
+		if (daemon->assignments[i].path != NULL) {
 			return true;
 		}
 	}
@@ -985,9 +1038,10 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 	bool image_changed = false;
 	bool fit_changed = false;
 	if ((req.flags & SWEETBG_CLEAR_IMAGE) != 0) {
-		image_changed = daemon->default_path[0] != '\0' ||
+		image_changed = daemon->default_path != NULL ||
 				any_image_assignment(daemon);
-		daemon->default_path[0] = '\0';
+		free(daemon->default_path);
+		daemon->default_path = NULL;
 		daemon->default_palette.count = 0;
 		clear_image_assignments(daemon);
 	}
@@ -1166,7 +1220,7 @@ static void report_outputs(struct sweetbg_registry *reg) {
 
 static bool check_image_path(
 	const char *path, char *message, size_t message_size) {
-	if (path[0] == '\0' || access(path, R_OK) == 0) {
+	if (path == NULL || path[0] == '\0' || access(path, R_OK) == 0) {
 		return true;
 	}
 	snprintf(message, message_size, "configured image %s: %s", path,
@@ -1190,18 +1244,17 @@ static bool validate_config_images(
 }
 
 static void apply_loaded_config(
-	struct daemon *daemon, const struct sweetbg_config *cfg) {
+	struct daemon *daemon, struct sweetbg_config *cfg) {
 	daemon->color = cfg->color;
 	daemon->color_auto = cfg->color_auto;
 	daemon->fit = cfg->fit;
-	daemon->default_path[0] = '\0';
+	daemon_free_paths(daemon);
 	daemon->default_palette.count = 0;
-	daemon->assignment_count = 0;
 
-	if (cfg->image[0] != '\0') {
+	if (cfg->image != NULL && cfg->image[0] != '\0') {
 		if (access(cfg->image, R_OK) == 0) {
-			memcpy(daemon->default_path, cfg->image,
-				strlen(cfg->image) + 1);
+			daemon->default_path = cfg->image;
+			cfg->image = NULL;
 		} else {
 			fprintf(stderr, "sweetbgd: configured image %s: %s\n",
 				cfg->image, strerror(errno));
@@ -1209,16 +1262,19 @@ static void apply_loaded_config(
 	}
 
 	for (size_t i = 0; i < cfg->output_count; i++) {
-		const struct sweetbg_config_output *out = &cfg->outputs[i];
+		struct sweetbg_config_output *out = &cfg->outputs[i];
 		if (out->has_fit) {
-			set_fit_assignment(daemon, out->name, out->fit);
+			if (!set_fit_assignment(daemon, out->name, out->fit)) {
+				fprintf(stderr, "sweetbgd: too many output "
+						"overrides\n");
+				continue;
+			}
 		}
 		if (out->has_image) {
-			if (out->image[0] == '\0') {
-				set_blank_assignment(daemon, out->name);
-			} else if (access(out->image, R_OK) == 0) {
-				set_image_assignment(
-					daemon, out->name, out->image);
+			if (out->image[0] == '\0' ||
+				access(out->image, R_OK) == 0) {
+				set_image_assignment_owned(
+					daemon, out->name, &out->image);
 			} else {
 				fprintf(stderr,
 					"sweetbgd: configured image %s: %s\n",
@@ -1230,20 +1286,23 @@ static void apply_loaded_config(
 
 static bool load_config(struct daemon *daemon, bool strict, char *message,
 	size_t message_size) {
-	struct sweetbg_config cfg;
+	struct sweetbg_config cfg = {0};
 	char err[256];
 	if (!sweetbg_config_load(&cfg, err, sizeof(err))) {
 		if (strict) {
 			snprintf(message, message_size, "%s", err);
+			sweetbg_config_free(&cfg);
 			return false;
 		} else {
 			fprintf(stderr, "sweetbgd: %s\n", err);
 		}
 	}
 	if (strict && !validate_config_images(&cfg, message, message_size)) {
+		sweetbg_config_free(&cfg);
 		return false;
 	}
 	apply_loaded_config(daemon, &cfg);
+	sweetbg_config_free(&cfg);
 	return true;
 }
 
@@ -1268,7 +1327,6 @@ static bool serve(struct wl_display *display, struct sweetbg_ipc_server *ipc,
 	struct daemon daemon = {
 		.display = display,
 		.reg = &reg,
-		.default_path = {0},
 	};
 	char err[256];
 	load_config(&daemon, false, err, sizeof(err));
@@ -1276,11 +1334,13 @@ static bool serve(struct wl_display *display, struct sweetbg_ipc_server *ipc,
 	// The initial configures flagged each surface; paint config image/color
 	reconcile_paint(&daemon);
 	if (wl_display_roundtrip(display) < 0) {
+		daemon_free_paths(&daemon);
 		sweetbg_registry_finish(&reg);
 		return false;
 	}
 
 	bool ok = run_loop(&daemon, ipc, signal_fd);
+	daemon_free_paths(&daemon);
 	sweetbg_registry_finish(&reg);
 	return ok;
 }

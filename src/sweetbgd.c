@@ -338,6 +338,7 @@ static void reconcile_paint(struct daemon *daemon) {
 			!output->surface.needs_repaint) {
 			continue;
 		}
+		output->generation++;
 		const char *path = effective_path(daemon, output);
 		if (path[0] == '\0') {
 			paint_background(daemon, output);
@@ -360,6 +361,8 @@ struct prepared_request {
 	char path[PATH_MAX];
 	uint32_t colors[SWEETBG_MAX_PALETTE];
 	uint8_t color_count;
+	uint32_t generation;
+	bool has_generation;
 };
 
 static bool parse_prepared(
@@ -396,6 +399,8 @@ static bool parse_prepared(
 	off += path_len;
 
 	req->color_count = 0;
+	req->generation = 0;
+	req->has_generation = false;
 	if (off + 4 <= len) {
 		uint32_t n = sweetbg_get_u32(p + off);
 		off += 4;
@@ -407,6 +412,10 @@ static bool parse_prepared(
 			off += 4;
 		}
 		req->color_count = (uint8_t)n;
+		if (off + 4 <= len) {
+			req->generation = sweetbg_get_u32(p + off);
+			req->has_generation = true;
+		}
 	}
 	return true;
 }
@@ -452,8 +461,11 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 		return SWEETBG_STATUS_ERR_IMAGE;
 	}
 
+	bool stale_generation =
+		req.has_generation && req.generation != match->generation;
 	if (req.mode == SWEETBG_IMG_REPAINT &&
-		strcmp(req.path, effective_path(daemon, match)) != 0) {
+		(stale_generation ||
+			strcmp(req.path, effective_path(daemon, match)) != 0)) {
 		snprintf(message, message_size, "superseded prepare for %s",
 			req.name);
 		return SWEETBG_STATUS_OK;
@@ -472,7 +484,14 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	} else if (req.mode == SWEETBG_IMG_OVERRIDE) {
 		set_image_assignment(daemon, req.name, req.path);
 	}
+	if (req.mode != SWEETBG_IMG_REPAINT) {
+		match->generation++;
+	}
 	set_effective_palette(daemon, req.name, req.colors, req.color_count);
+	if (req.mode != SWEETBG_IMG_REPAINT && stale_generation) {
+		match->surface.needs_repaint = true;
+		reconcile_paint(daemon);
+	}
 	snprintf(message, message_size, "applied %s to %s", req.path, req.name);
 	return SWEETBG_STATUS_OK;
 }
@@ -644,10 +663,11 @@ static uint8_t handle_query_outputs(
 		sweetbg_surface_buffer_size(
 			&output->surface, output->scale, &pw, &ph);
 		append_line(message, message_size, &off,
-			"%s %u %u %u %u %d %d %u %u\n", output->name, pw, ph,
+			"%s %u %u %u %u %d %d %u %u %u\n", output->name, pw, ph,
 			scale, (unsigned)effective_fit(daemon, output),
 			output->logical_x, output->logical_y,
-			output->logical_width, output->logical_height);
+			output->logical_width, output->logical_height,
+			output->generation);
 	}
 	if (off > 0 && off <= message_size && message[off - 1] == '\n') {
 		message[off - 1] = '\0';
@@ -673,6 +693,10 @@ static void repaint_after_change(
 				fit_uses_color(effective_fit(daemon, output)));
 		if (is_placeholder ? color_changed : image_needs) {
 			output->surface.needs_repaint = true;
+		} else if (is_placeholder && fit_changed) {
+			// No pixels change yet, but an in-flight first image is
+			// stale
+			output->generation++;
 		}
 	}
 	reconcile_paint(daemon);
@@ -698,6 +722,8 @@ static void repaint_output_after_fit(struct daemon *daemon,
 		return;
 	}
 	if (effective_path(daemon, output)[0] == '\0') {
+		// Invalidate a first image prepared with the previous fit
+		output->generation++;
 		return;
 	}
 	output->surface.needs_repaint = true;
@@ -946,10 +972,11 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 				clear_fit_assignment(daemon, req.output) &&
 				old_fit != effective_fit(daemon, output);
 		}
-		if (image_changed || (fit_changed && had_image &&
-					     output->surface.configured)) {
+		if (image_changed) {
 			output->surface.needs_repaint = true;
 			reconcile_paint(daemon);
+		} else if (fit_changed) {
+			repaint_output_after_fit(daemon, output, old_fit);
 		}
 		clear_message(&req, message, message_size);
 		return SWEETBG_STATUS_OK;

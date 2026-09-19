@@ -81,7 +81,7 @@ static void handle_logical_position(
 	if (x != output->logical_x || y != output->logical_y) {
 		output->logical_x = x;
 		output->logical_y = y;
-		output->surface.needs_repaint = true;
+		output->layout_changed = true;
 	}
 }
 
@@ -96,7 +96,7 @@ static void handle_logical_size(void *data, struct zxdg_output_v1 *xdg_output,
 		(uint32_t)height != output->logical_height) {
 		output->logical_width = (uint32_t)width;
 		output->logical_height = (uint32_t)height;
-		output->surface.needs_repaint = true;
+		output->layout_changed = true;
 	}
 }
 

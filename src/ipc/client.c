@@ -121,8 +121,10 @@ struct output_info {
 	char name[64];
 	uint32_t width;
 	uint32_t height;
+	uint32_t generation;
 	int32_t scale;
 	enum sweetbg_fit fit;
+	bool has_generation;
 	struct sweetbg_layout_output logical;
 };
 
@@ -186,6 +188,7 @@ static int query_outputs(struct output_info *list, int max,
 		const char *lys = strtok_r(NULL, " ", &field_save);
 		const char *lws = strtok_r(NULL, " ", &field_save);
 		const char *lhs = strtok_r(NULL, " ", &field_save);
+		const char *gs = strtok_r(NULL, " ", &field_save);
 		if (name == NULL || ws == NULL || hs == NULL || ss == NULL ||
 			strlen(name) >= sizeof(list[count].name)) {
 			continue;
@@ -206,6 +209,8 @@ static int query_outputs(struct output_info *list, int max,
 		list[count].height = (uint32_t)h;
 		list[count].scale = (int32_t)s;
 		list[count].fit = *fit;
+		list[count].generation = 0;
+		list[count].has_generation = false;
 		list[count].logical =
 			(struct sweetbg_layout_output){0, 0, 0, 0};
 		if (lxs != NULL && lys != NULL && lws != NULL && lhs != NULL) {
@@ -225,6 +230,14 @@ static int query_outputs(struct output_info *list, int max,
 				list[count].logical.y = (int32_t)ly;
 				list[count].logical.w = (uint32_t)lw;
 				list[count].logical.h = (uint32_t)lh;
+			}
+		}
+		if (gs != NULL) {
+			char *end_g;
+			unsigned long g = strtoul(gs, &end_g, 10);
+			if (*end_g == '\0' && g <= UINT32_MAX) {
+				list[count].generation = (uint32_t)g;
+				list[count].has_generation = true;
 			}
 		}
 		if (fs != NULL) {
@@ -311,7 +324,8 @@ static int send_prepared(const struct output_info *out, uint32_t mode,
 	size_t color_count) {
 	size_t name_len = strlen(out->name);
 	size_t path_len = strlen(path);
-	size_t total = 20 + name_len + 4 + path_len + 4 + color_count * 4;
+	size_t total = 20 + name_len + 4 + path_len + 4 + color_count * 4 +
+		       (out->has_generation ? 4 : 0);
 	if (total > SWEETBG_IPC_MAX_PAYLOAD) {
 		fprintf(stderr, "sweetbg: image request too long\n");
 		return 1;
@@ -335,6 +349,10 @@ static int send_prepared(const struct output_info *out, uint32_t mode,
 	off += 4;
 	for (size_t i = 0; i < color_count; i++) {
 		sweetbg_put_u32(payload + off, colors[i]);
+		off += 4;
+	}
+	if (out->has_generation) {
+		sweetbg_put_u32(payload + off, out->generation);
 		off += 4;
 	}
 

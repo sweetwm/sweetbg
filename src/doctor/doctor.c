@@ -150,11 +150,12 @@ static void doctor_check_config(int *warnings, int *failures) {
 	if (!ok) {
 		doctor_line(DOCTOR_FAIL, "config", "%s", err);
 		doctor_count(DOCTOR_FAIL, warnings, failures);
+		sweetbg_config_free(&cfg);
 		return;
 	}
 	doctor_line(DOCTOR_OK, "config", "%s parses", path);
 
-	if (cfg.image[0] != '\0') {
+	if (cfg.image != NULL && cfg.image[0] != '\0') {
 		enum doctor_status status =
 			doctor_image_path("image", "default", cfg.image);
 		doctor_count(status, warnings, failures);
@@ -168,6 +169,7 @@ static void doctor_check_config(int *warnings, int *failures) {
 			doctor_image_path("image", out->name, out->image);
 		doctor_count(status, warnings, failures);
 	}
+	sweetbg_config_free(&cfg);
 }
 
 static void doctor_print_response(const uint8_t *response, uint32_t len) {

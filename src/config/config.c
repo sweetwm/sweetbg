@@ -45,11 +45,27 @@ bool sweetbg_fit_from_name(const char *name, enum sweetbg_fit *out) {
 }
 
 void sweetbg_config_defaults(struct sweetbg_config *cfg) {
-	cfg->image[0] = '\0';
+	memset(cfg, 0, sizeof(*cfg));
 	cfg->color = DEFAULT_COLOR;
-	cfg->color_auto = false;
 	cfg->fit = SWEETBG_FIT_COVER;
-	cfg->output_count = 0;
+}
+
+void sweetbg_config_free(struct sweetbg_config *cfg) {
+	free(cfg->image);
+	for (size_t i = 0; i < cfg->output_count; i++) {
+		free(cfg->outputs[i].image);
+	}
+	sweetbg_config_defaults(cfg);
+}
+
+static bool replace_string(char **slot, const char *value) {
+	char *copy = strdup(value);
+	if (copy == NULL) {
+		return false;
+	}
+	free(*slot);
+	*slot = copy;
+	return true;
 }
 
 // Skip leading blanks and strip trailing blanks/newline in place
@@ -130,7 +146,11 @@ static bool apply_pair(struct sweetbg_config *cfg, const char *key,
 	}
 
 	if (strcmp(key, "image") == 0) {
-		memcpy(cfg->image, text, strlen(text) + 1);
+		if (!replace_string(&cfg->image, text)) {
+			snprintf(err, err_size, "%s:%d: out of memory", name,
+				line);
+			return false;
+		}
 		return true;
 	}
 	if (strcmp(key, "color") == 0) {
@@ -172,7 +192,11 @@ static bool apply_output_pair(struct sweetbg_config_output *output,
 		return false;
 	}
 	if (strcmp(key, "image") == 0) {
-		memcpy(output->image, text, strlen(text) + 1);
+		if (!replace_string(&output->image, text)) {
+			snprintf(err, err_size, "%s:%d: out of memory", name,
+				line);
+			return false;
+		}
 		output->has_image = true;
 		return true;
 	}
@@ -239,7 +263,7 @@ static struct sweetbg_config_output *parse_section(struct sweetbg_config *cfg,
 	}
 	struct sweetbg_config_output *out = &cfg->outputs[cfg->output_count++];
 	memcpy(out->name, output_name, strlen(output_name) + 1);
-	out->image[0] = '\0';
+	out->image = NULL;
 	out->fit = SWEETBG_FIT_COVER;
 	out->has_image = false;
 	out->has_fit = false;
@@ -335,7 +359,7 @@ bool sweetbg_config_load(
 	bool ok = sweetbg_config_parse(fp, path, cfg, err, err_size);
 	fclose(fp);
 	if (!ok) {
-		sweetbg_config_defaults(cfg);
+		sweetbg_config_free(cfg);
 	}
 	return ok;
 }

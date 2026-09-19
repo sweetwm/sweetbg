@@ -27,14 +27,14 @@ bool sweetbg_config_parse_color(const char *s, uint32_t *out);
 
 struct sweetbg_config_output {
 	char name[64];
-	char image[PATH_MAX];
+	char *image;
 	enum sweetbg_fit fit;
 	bool has_image;
 	bool has_fit;
 };
 
 struct sweetbg_config {
-	char image[PATH_MAX];
+	char *image;
 	uint32_t color;
 	bool color_auto;
 	enum sweetbg_fit fit;
@@ -43,6 +43,7 @@ struct sweetbg_config {
 };
 
 void sweetbg_config_defaults(struct sweetbg_config *cfg);
+void sweetbg_config_free(struct sweetbg_config *cfg);
 bool sweetbg_config_load(
 	struct sweetbg_config *cfg, char *err, size_t err_size);
 bool sweetbg_config_parse(FILE *fp, const char *name,

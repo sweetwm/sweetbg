@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/un.h>
@@ -14,10 +13,10 @@
 #include "image/image.h"
 #include "image/layout.h"
 #include "image/palette.h"
+#include "ipc/prepared.h"
 #include "ipc/protocol.h"
 
 #define MAX_OUTPUTS 64
-#define MAX_PREPARE_DIMENSION 32768u
 
 #define REPLY_TIMEOUT_SECONDS 5
 
@@ -126,6 +125,13 @@ struct output_info {
 	enum sweetbg_fit fit;
 	bool has_generation;
 	struct sweetbg_layout_output logical;
+};
+
+struct prepared_buffer {
+	uint32_t width;
+	uint32_t height;
+	enum sweetbg_fit fit;
+	int fd;
 };
 
 static int query_outputs(struct output_info *list, int max,
@@ -275,48 +281,18 @@ static bool span_placement(const struct sweetbg_image *image,
 
 static int prepare_memfd(const struct sweetbg_image *image,
 	const struct output_info *list, int count, int index, uint32_t color) {
-	uint32_t width = list[index].width;
-	uint32_t height = list[index].height;
-	enum sweetbg_fit fit = list[index].fit;
-	if (width == 0 || height == 0 || width > MAX_PREPARE_DIMENSION ||
-		height > MAX_PREPARE_DIMENSION) {
-		return -1;
-	}
-	size_t stride = (size_t)width * 4;
-	size_t size = stride * height;
-
-	int fd = memfd_create("sweetbg-wallpaper", MFD_CLOEXEC);
-	if (fd < 0) {
-		return -1;
-	}
-	if (ftruncate(fd, (off_t)size) < 0) {
-		close(fd);
-		return -1;
-	}
-	void *data =
-		mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (data == MAP_FAILED) {
-		close(fd);
-		return -1;
-	}
 	struct sweetbg_placement place;
-	bool ok;
-	if (fit == SWEETBG_FIT_SPAN && span_placement(image, list, count, index,
-					       width, height, &place)) {
-		ok = sweetbg_image_render_placement(
-			image, &place, width, height, data);
-	} else {
-		// Also the path when span has no usable layout yet
-		ok = sweetbg_image_render(image,
-			fit == SWEETBG_FIT_SPAN ? SWEETBG_FIT_COVER : fit,
-			width, height, color, data);
+	const struct sweetbg_placement *placement = NULL;
+	enum sweetbg_fit fit = list[index].fit;
+	if (fit == SWEETBG_FIT_SPAN &&
+		span_placement(image, list, count, index, list[index].width,
+			list[index].height, &place)) {
+		placement = &place;
+	} else if (fit == SWEETBG_FIT_SPAN) {
+		fit = SWEETBG_FIT_COVER;
 	}
-	munmap(data, size);
-	if (!ok) {
-		close(fd);
-		return -1;
-	}
-	return fd;
+	return sweetbg_prepared_buffer_create(image, fit, list[index].width,
+		list[index].height, color, placement);
 }
 
 static int send_prepared(const struct output_info *out, uint32_t mode,
@@ -396,6 +372,21 @@ static bool output_requested(const char *name, const char *output,
 	return false;
 }
 
+static int reusable_buffer(const struct prepared_buffer *buffers, size_t count,
+	const struct output_info *output) {
+	if (output->fit == SWEETBG_FIT_SPAN) {
+		return -1;
+	}
+	for (size_t i = 0; i < count; i++) {
+		if (buffers[i].width == output->width &&
+			buffers[i].height == output->height &&
+			buffers[i].fit == output->fit) {
+			return buffers[i].fd;
+		}
+	}
+	return -1;
+}
+
 static int prepare_outputs(const char *path, const char *output,
 	const char *const *names, size_t name_count, uint32_t mode) {
 	struct output_info outputs[MAX_OUTPUTS];
@@ -440,6 +431,8 @@ static int prepare_outputs(const char *path, const char *output,
 	// already computed, so this costs nothing extra
 	uint32_t fill = color_auto && color_count > 0 ? colors[0] : color;
 
+	struct prepared_buffer buffers[MAX_OUTPUTS];
+	size_t buffer_count = 0;
 	int rc = 0;
 	int applied = 0;
 	for (int i = 0; i < count; i++) {
@@ -447,12 +440,21 @@ static int prepare_outputs(const char *path, const char *output,
 			    outputs[i].name, output, names, name_count)) {
 			continue;
 		}
-		int memfd = prepare_memfd(&image, outputs, count, i, fill);
+		int memfd = reusable_buffer(buffers, buffer_count, &outputs[i]);
+		bool reusable = memfd >= 0;
+		if (!reusable) {
+			memfd = prepare_memfd(&image, outputs, count, i, fill);
+		}
 		if (memfd < 0) {
 			fprintf(stderr, "sweetbg: failed to prepare %s\n",
 				outputs[i].name);
 			rc = 1;
 			continue;
+		}
+		if (!reusable && outputs[i].fit != SWEETBG_FIT_SPAN) {
+			buffers[buffer_count++] = (struct prepared_buffer){
+				outputs[i].width, outputs[i].height,
+				outputs[i].fit, memfd};
 		}
 		if (send_prepared(&outputs[i], mode, path, memfd, colors,
 			    color_count) != 0) {
@@ -460,7 +462,12 @@ static int prepare_outputs(const char *path, const char *output,
 		} else {
 			applied++;
 		}
-		close(memfd);
+		if (outputs[i].fit == SWEETBG_FIT_SPAN) {
+			close(memfd);
+		}
+	}
+	for (size_t i = 0; i < buffer_count; i++) {
+		close(buffers[i].fd);
 	}
 	sweetbg_image_free(&image);
 

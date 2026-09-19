@@ -56,6 +56,7 @@ executable(
 	'src/sweetbg.c',
 	'src/doctor/doctor.c',
 	'src/ipc/client.c',
+	'src/ipc/prepared.c',
 	'src/image/image.c',
 	'src/image/fit.c',
 	'src/image/layout.c',

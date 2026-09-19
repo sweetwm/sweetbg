@@ -40,3 +40,17 @@ int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
 	}
 	return fd;
 }
+
+int sweetbg_prepared_buffer_find(const struct sweetbg_prepared_buffer *buffers,
+	size_t count, uint32_t width, uint32_t height, enum sweetbg_fit fit) {
+	if (fit == SWEETBG_FIT_SPAN) {
+		return -1;
+	}
+	for (size_t i = 0; i < count; i++) {
+		if (buffers[i].width == width && buffers[i].height == height &&
+			buffers[i].fit == fit) {
+			return buffers[i].fd;
+		}
+	}
+	return -1;
+}

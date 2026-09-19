@@ -54,6 +54,7 @@ ipc_proto = static_library(
 executable(
 	'sweetbg',
 	'src/sweetbg.c',
+	'src/cli/img.c',
 	'src/doctor/doctor.c',
 	'src/ipc/client.c',
 	'src/ipc/prepared.c',

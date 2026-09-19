@@ -1,163 +1,16 @@
-#include <errno.h>
-#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
+#include "cli/img.h"
 #include "config/config.h"
 #include "config/config_write.h"
 #include "doctor/doctor.h"
-#include "image/pick.h"
 #include "ipc/client.h"
 #include "ipc/protocol.h"
 
-#define MAX_IMG_OVERRIDES 16
-
 static bool valid_output_arg(const char *output) {
 	return output != NULL && output[0] != '\0' && strlen(output) <= 63;
-}
-
-static int cmd_img(const char *arg, const char *output, bool persist) {
-	char resolved[PATH_MAX];
-	if (realpath(arg, resolved) == NULL) {
-		fprintf(stderr, "sweetbg: cannot use '%s': %s\n", arg,
-			strerror(errno));
-		return 1;
-	}
-
-	// A directory is resolved to one file here and never travels further,
-	// so what the daemon stores and what --persist writes stay a real image
-	struct stat st;
-	if (stat(resolved, &st) == 0 && S_ISDIR(st.st_mode)) {
-		char picked[PATH_MAX];
-		char err[256];
-		if (!sweetbg_pick_random_image(resolved, picked, sizeof(picked),
-			    err, sizeof(err))) {
-			fprintf(stderr, "sweetbg: %s\n", err);
-			return 1;
-		}
-		memcpy(resolved, picked, strlen(picked) + 1);
-	}
-
-	if (output != NULL && !valid_output_arg(output)) {
-		fprintf(stderr, "sweetbg: invalid --output name\n");
-		return 2;
-	}
-	int rc = sweetbg_client_set_image(resolved, output);
-	if (rc != 0 || !persist) {
-		return rc;
-	}
-	char err[256];
-	if (!sweetbg_config_persist_image(output, resolved, err, sizeof(err))) {
-		fprintf(stderr,
-			"sweetbg: applied but could not save config: %s\n",
-			err);
-		return 1;
-	}
-	return 0;
-}
-
-struct img_override {
-	const char *name;
-	size_t name_len;
-	const char *path;
-};
-
-static bool is_override_token(const char *arg, struct img_override *out) {
-	const char *eq = strchr(arg, '=');
-	if (eq == NULL || eq == arg ||
-		memchr(arg, '/', (size_t)(eq - arg)) != NULL) {
-		return false;
-	}
-	out->name = arg;
-	out->name_len = (size_t)(eq - arg);
-	out->path = eq + 1;
-	return true;
-}
-
-static int run_img(int argc, char **argv) {
-	const char *default_path = NULL;
-	const char *flag_output = NULL;
-	bool persist = false;
-	struct img_override overrides[MAX_IMG_OVERRIDES];
-	int override_count = 0;
-
-	for (int i = 2; i < argc; i++) {
-		const char *a = argv[i];
-		if (strcmp(a, "-p") == 0 || strcmp(a, "--persist") == 0) {
-			persist = true;
-			continue;
-		}
-		if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
-			if (i + 1 >= argc) {
-				fprintf(stderr,
-					"sweetbg: --output needs a name\n");
-				return 2;
-			}
-			flag_output = argv[++i];
-			continue;
-		}
-		if (strncmp(a, "--output=", 9) == 0) {
-			flag_output = a + 9;
-			continue;
-		}
-		if (a[0] == '-' && a[1] != '\0') {
-			fprintf(stderr, "sweetbg: unknown img option '%s'\n",
-				a);
-			return 2;
-		}
-
-		struct img_override token;
-		if (is_override_token(a, &token)) {
-			if (override_count >= MAX_IMG_OVERRIDES) {
-				fprintf(stderr, "sweetbg: too many outputs\n");
-				return 2;
-			}
-			overrides[override_count++] = token;
-		} else if (default_path == NULL) {
-			default_path = a;
-		} else {
-			fprintf(stderr,
-				"sweetbg: img takes one default path\n");
-			return 2;
-		}
-	}
-
-	if (flag_output != NULL) {
-		if (override_count > 0 || default_path == NULL) {
-			fprintf(stderr, "sweetbg: use either '--output <name>' "
-					"with one path or <name>=<path> "
-					"arguments\n");
-			return 2;
-		}
-		return cmd_img(default_path, flag_output, persist);
-	}
-
-	if (default_path == NULL && override_count == 0) {
-		fprintf(stderr,
-			"usage: sweetbg img <path> | <name>=<path>... | "
-			"<path> --output <name>\n");
-		return 2;
-	}
-
-	int rc = 0;
-	if (default_path != NULL) {
-		rc |= cmd_img(default_path, NULL, persist);
-	}
-	for (int i = 0; i < override_count; i++) {
-		char name[64];
-		if (overrides[i].name_len >= sizeof(name)) {
-			fprintf(stderr, "sweetbg: invalid output name\n");
-			rc = 2;
-			continue;
-		}
-		memcpy(name, overrides[i].name, overrides[i].name_len);
-		name[overrides[i].name_len] = '\0';
-		rc |= cmd_img(overrides[i].path, name, persist);
-	}
-	return rc;
 }
 
 static int cmd_set(int argc, char **argv) {
@@ -458,7 +311,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (strcmp(cmd, "img") == 0) {
-		return run_img(argc, argv);
+		return sweetbg_cmd_img(argc, argv);
 	}
 
 	if (strcmp(cmd, "set") == 0) {

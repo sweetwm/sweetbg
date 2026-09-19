@@ -78,45 +78,46 @@ void sweetbg_image_free(struct sweetbg_image *img) {
 	img->height = 0;
 }
 
-static void sample_box(const struct sweetbg_image *src,
-	const struct sweetbg_rect *crop, uint32_t out_w, uint32_t out_h,
-	uint32_t ox, uint32_t oy, uint8_t *out) {
-	uint32_t sx0 = crop->x + (uint32_t)((uint64_t)ox * crop->w / out_w);
-	uint32_t sx1 =
-		crop->x + (uint32_t)((uint64_t)(ox + 1) * crop->w / out_w);
-	uint32_t sy0 = crop->y + (uint32_t)((uint64_t)oy * crop->h / out_h);
-	uint32_t sy1 =
-		crop->y + (uint32_t)((uint64_t)(oy + 1) * crop->h / out_h);
+struct span {
+	uint32_t start;
+	uint32_t end;
+};
 
-	if (sx1 <= sx0) {
-		sx1 = sx0 + 1;
+// Source range each output column or row averages; always at least one pixel
+static void fill_spans(
+	uint32_t start, uint32_t len, uint32_t out, struct span *spans) {
+	for (uint32_t o = 0; o < out; o++) {
+		uint32_t a = start + (uint32_t)((uint64_t)o * len / out);
+		uint32_t b = start + (uint32_t)((uint64_t)(o + 1) * len / out);
+		if (b <= a) {
+			b = a + 1;
+		}
+		if (b > start + len) {
+			b = start + len;
+		}
+		spans[o] = (struct span){a, b};
 	}
-	if (sy1 <= sy0) {
-		sy1 = sy0 + 1;
-	}
-	if (sx1 > crop->x + crop->w) {
-		sx1 = crop->x + crop->w;
-	}
-	if (sy1 > crop->y + crop->h) {
-		sy1 = crop->y + crop->h;
-	}
+}
 
+static void average_box(const struct sweetbg_image *src, struct span col,
+	struct span row, uint8_t *out) {
 	uint64_t b = 0;
 	uint64_t g = 0;
 	uint64_t r = 0;
-	for (uint32_t sy = sy0; sy < sy1; sy++) {
-		const uint8_t *row =
-			src->pixels +
-			((uint64_t)sy * src->width + sx0) * BYTES_PER_PIXEL;
-		for (uint32_t sx = sx0; sx < sx1; sx++) {
-			b += row[0];
-			g += row[1];
-			r += row[2];
-			row += BYTES_PER_PIXEL;
+	for (uint32_t sy = row.start; sy < row.end; sy++) {
+		const uint8_t *pixel =
+			src->pixels + ((uint64_t)sy * src->width + col.start) *
+					      BYTES_PER_PIXEL;
+		for (uint32_t sx = col.start; sx < col.end; sx++) {
+			b += pixel[0];
+			g += pixel[1];
+			r += pixel[2];
+			pixel += BYTES_PER_PIXEL;
 		}
 	}
 
-	uint64_t count = (uint64_t)(sx1 - sx0) * (sy1 - sy0);
+	uint64_t count =
+		(uint64_t)(col.end - col.start) * (row.end - row.start);
 	out[0] = (uint8_t)(b / count);
 	out[1] = (uint8_t)(g / count);
 	out[2] = (uint8_t)(r / count);
@@ -133,18 +134,50 @@ static void fill_color(
 	}
 }
 
-static void blit_placement(const struct sweetbg_image *src,
+static bool blit_placement(const struct sweetbg_image *src,
 	const struct sweetbg_placement *place, uint32_t out_w, uint8_t *dst) {
-	for (uint32_t ly = 0; ly < place->dst.h; ly++) {
-		uint32_t oy = place->dst.y + ly;
-		uint8_t *out_row = dst + (uint64_t)oy * out_w * BYTES_PER_PIXEL;
-		for (uint32_t lx = 0; lx < place->dst.w; lx++) {
-			uint32_t ox = place->dst.x + lx;
-			sample_box(src, &place->src, place->dst.w, place->dst.h,
-				lx, ly,
-				out_row + (uint64_t)ox * BYTES_PER_PIXEL);
+	const struct sweetbg_rect *source = &place->src;
+	const struct sweetbg_rect *dest = &place->dst;
+	if (source->w == 0 || source->h == 0 || dest->w == 0 || dest->h == 0) {
+		return false;
+	}
+	if (source->w == dest->w && source->h == dest->h) {
+		// The X byte is ignored by XRGB8888, so whole rows can be
+		// copied
+		for (uint32_t y = 0; y < dest->h; y++) {
+			memcpy(dst + ((uint64_t)(dest->y + y) * out_w +
+					     dest->x) *
+						BYTES_PER_PIXEL,
+				src->pixels + ((uint64_t)(source->y + y) *
+							      src->width +
+						      source->x) *
+						      BYTES_PER_PIXEL,
+				(size_t)dest->w * BYTES_PER_PIXEL);
+		}
+		return true;
+	}
+
+	struct span *cols = malloc((size_t)dest->w * sizeof(*cols));
+	struct span *rows = malloc((size_t)dest->h * sizeof(*rows));
+	if (cols == NULL || rows == NULL) {
+		free(cols);
+		free(rows);
+		return false;
+	}
+	fill_spans(source->x, source->w, dest->w, cols);
+	fill_spans(source->y, source->h, dest->h, rows);
+	for (uint32_t ly = 0; ly < dest->h; ly++) {
+		uint8_t *out =
+			dst + ((uint64_t)(dest->y + ly) * out_w + dest->x) *
+				      BYTES_PER_PIXEL;
+		for (uint32_t lx = 0; lx < dest->w; lx++) {
+			average_box(src, cols[lx], rows[ly], out);
+			out += BYTES_PER_PIXEL;
 		}
 	}
+	free(cols);
+	free(rows);
+	return true;
 }
 
 static void render_tile(const struct sweetbg_image *src, uint32_t out_w,
@@ -183,8 +216,7 @@ bool sweetbg_image_render_placement(const struct sweetbg_image *src,
 		(uint64_t)place->dst.y + place->dst.h > out_h) {
 		return false;
 	}
-	blit_placement(src, place, out_w, dst);
-	return true;
+	return blit_placement(src, place, out_w, dst);
 }
 
 bool sweetbg_image_render(const struct sweetbg_image *src, enum sweetbg_fit fit,
@@ -217,6 +249,5 @@ bool sweetbg_image_render(const struct sweetbg_image *src, enum sweetbg_fit fit,
 		break;
 	}
 
-	blit_placement(src, &place, out_w, dst);
-	return true;
+	return blit_placement(src, &place, out_w, dst);
 }

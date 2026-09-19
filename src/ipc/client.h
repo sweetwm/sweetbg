@@ -15,4 +15,7 @@ int sweetbg_client_set_image(const char *path, const char *output);
 
 int sweetbg_client_prepare_output(const char *name, const char *path);
 
+int sweetbg_client_prepare_outputs(
+	const char *path, const char *const *names, size_t name_count);
+
 #endif

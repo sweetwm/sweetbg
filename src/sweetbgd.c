@@ -287,8 +287,9 @@ static void client_binary(char *out, size_t out_size) {
 	snprintf(out, out_size, "sweetbg");
 }
 
-static void spawn_prepare(const char *name, const char *path) {
-	if (name == NULL) {
+static void spawn_prepare_set(
+	const char *path, const char *const *names, size_t name_count) {
+	if (name_count == 0) {
 		return;
 	}
 	pid_t pid = fork();
@@ -303,7 +304,20 @@ static void spawn_prepare(const char *name, const char *path) {
 		sigprocmask(SIG_UNBLOCK, &mask, NULL);
 		char bin[PATH_MAX];
 		client_binary(bin, sizeof(bin));
-		execlp(bin, "sweetbg", "prepare", name, path, (char *)NULL);
+		char *args[MAX_QUERY_OUTPUTS + 4] = {
+			"sweetbg",
+			"prepare-set",
+			NULL,
+		};
+		// exec does not modify the inherited daemon strings
+		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+		args[2] = (char *)path;
+		for (size_t i = 0; i < name_count; i++) {
+			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+			args[3 + i] = (char *)names[i];
+		}
+		args[3 + name_count] = NULL;
+		execvp(bin, args);
 		fprintf(stderr, "sweetbgd: cannot execute %s: %s\n", bin,
 			strerror(errno));
 		_exit(127);
@@ -353,6 +367,12 @@ static void paint_background(
 static void reconcile_paint(struct daemon *daemon) {
 	spread_span_repaint(daemon);
 
+	struct repaint_target {
+		const char *name;
+		const char *path;
+	};
+	struct repaint_target targets[MAX_QUERY_OUTPUTS];
+	size_t target_count = 0;
 	struct sweetbg_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (!output->surface.configured ||
@@ -368,8 +388,35 @@ static void reconcile_paint(struct daemon *daemon) {
 				paint_background(daemon, output);
 			}
 			output->surface.needs_repaint = false;
-			spawn_prepare(output->name, path);
+			if (output->name == NULL) {
+				continue;
+			}
+			if (target_count < MAX_QUERY_OUTPUTS) {
+				targets[target_count++] =
+					(struct repaint_target){
+						output->name, path};
+			} else {
+				const char *name = output->name;
+				spawn_prepare_set(path, &name, 1);
+			}
 		}
+	}
+
+	bool grouped[MAX_QUERY_OUTPUTS] = {false};
+	for (size_t i = 0; i < target_count; i++) {
+		if (grouped[i]) {
+			continue;
+		}
+		const char *names[MAX_QUERY_OUTPUTS];
+		size_t name_count = 0;
+		for (size_t j = i; j < target_count; j++) {
+			if (!grouped[j] &&
+				strcmp(targets[i].path, targets[j].path) == 0) {
+				grouped[j] = true;
+				names[name_count++] = targets[j].name;
+			}
+		}
+		spawn_prepare_set(targets[i].path, names, name_count);
 	}
 }
 

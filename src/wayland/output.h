@@ -23,6 +23,7 @@ struct sweetbg_output {
 	int32_t logical_y;
 	uint32_t logical_width;
 	uint32_t logical_height;
+	bool layout_changed;
 	uint32_t generation;
 	char *name;
 	char *description;

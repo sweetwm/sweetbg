@@ -311,13 +311,18 @@ static void spawn_prepare(const char *name, const char *path) {
 }
 
 static void spread_span_repaint(struct daemon *daemon) {
+	bool dirty = daemon->reg->layout_dirty;
+	daemon->reg->layout_dirty = false;
+	struct sweetbg_output *output;
+	wl_list_for_each(output, &daemon->reg->outputs, link) {
+		dirty = output->layout_changed || dirty;
+		output->layout_changed = false;
+	}
+
 	if (daemon->fit != SWEETBG_FIT_SPAN) {
-		daemon->reg->layout_dirty = false;
 		return;
 	}
 
-	bool dirty = daemon->reg->layout_dirty;
-	struct sweetbg_output *output;
 	if (!dirty) {
 		wl_list_for_each(output, &daemon->reg->outputs, link) {
 			if (output->surface.configured &&
@@ -336,7 +341,6 @@ static void spread_span_repaint(struct daemon *daemon) {
 			output->surface.needs_repaint = true;
 		}
 	}
-	daemon->reg->layout_dirty = false;
 }
 
 static void paint_background(

@@ -35,7 +35,8 @@ static bool is_webp(const uint8_t *sig, size_t n) {
 	       memcmp(sig + 8, "WEBP", 4) == 0;
 }
 
-bool sweetbg_image_load(struct sweetbg_image *img, const char *path, char *err,
+bool sweetbg_image_load(struct sweetbg_image *img, const char *path,
+	const struct sweetbg_image_load_options *options, char *err,
 	size_t err_size) {
 	img->width = 0;
 	img->height = 0;
@@ -59,7 +60,7 @@ bool sweetbg_image_load(struct sweetbg_image *img, const char *path, char *err,
 	if (is_png(sig, got)) {
 		ok = sweetbg_decode_png(fp, img, err, err_size);
 	} else if (is_jpeg(sig, got)) {
-		ok = sweetbg_decode_jpeg(fp, img, err, err_size);
+		ok = sweetbg_decode_jpeg(fp, img, options, err, err_size);
 	} else if (is_webp(sig, got)) {
 		ok = sweetbg_decode_webp(fp, img, err, err_size);
 	} else {

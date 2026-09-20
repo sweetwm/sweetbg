@@ -118,12 +118,12 @@ void sweetbg_surface_buffer_size(const struct sweetbg_surface *surface,
 		*pixel_width =
 			(uint32_t)(((uint64_t)surface->width *
 						   surface->fractional_scale +
-					   FRACTIONAL_SCALE_DENOM - 1) /
+					   FRACTIONAL_SCALE_DENOM / 2) /
 				   FRACTIONAL_SCALE_DENOM);
 		*pixel_height =
 			(uint32_t)(((uint64_t)surface->height *
 						   surface->fractional_scale +
-					   FRACTIONAL_SCALE_DENOM - 1) /
+					   FRACTIONAL_SCALE_DENOM / 2) /
 				   FRACTIONAL_SCALE_DENOM);
 		return;
 	}

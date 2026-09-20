@@ -2,6 +2,7 @@
 #include <limits.h>
 #include <poll.h>
 #include <signal.h>
+#include <spawn.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -292,35 +293,52 @@ static void spawn_prepare_set(
 	if (name_count == 0) {
 		return;
 	}
-	pid_t pid = fork();
-	if (pid < 0) {
-		fprintf(stderr, "sweetbgd: cannot spawn client: %s\n",
-			strerror(errno));
+	char bin[PATH_MAX];
+	client_binary(bin, sizeof(bin));
+	char *args[MAX_QUERY_OUTPUTS + 4] = {
+		"sweetbg",
+		"prepare-set",
+		NULL,
+	};
+	// posix_spawn does not modify the supplied strings
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+	args[2] = (char *)path;
+	for (size_t i = 0; i < name_count; i++) {
+		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+		args[3 + i] = (char *)names[i];
+	}
+	args[3 + name_count] = NULL;
+
+	posix_spawnattr_t attr;
+	int rc = posix_spawnattr_init(&attr);
+	if (rc != 0) {
+		fprintf(stderr, "sweetbgd: cannot spawn %s: %s\n", bin,
+			strerror(rc));
 		return;
 	}
-	if (pid == 0) {
-		sigset_t mask;
-		term_signal_set(&mask);
-		sigprocmask(SIG_UNBLOCK, &mask, NULL);
-		char bin[PATH_MAX];
-		client_binary(bin, sizeof(bin));
-		char *args[MAX_QUERY_OUTPUTS + 4] = {
-			"sweetbg",
-			"prepare-set",
-			NULL,
-		};
-		// exec does not modify the inherited daemon strings
-		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-		args[2] = (char *)path;
-		for (size_t i = 0; i < name_count; i++) {
-			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-			args[3 + i] = (char *)names[i];
-		}
-		args[3 + name_count] = NULL;
-		execvp(bin, args);
-		fprintf(stderr, "sweetbgd: cannot execute %s: %s\n", bin,
-			strerror(errno));
-		_exit(127);
+	sigset_t defaults;
+	sigemptyset(&defaults);
+	sigaddset(&defaults, SIGCHLD);
+	sigaddset(&defaults, SIGINT);
+	sigaddset(&defaults, SIGTERM);
+	sigset_t mask;
+	sigemptyset(&mask);
+	rc = posix_spawnattr_setsigdefault(&attr, &defaults);
+	if (rc == 0) {
+		rc = posix_spawnattr_setsigmask(&attr, &mask);
+	}
+	if (rc == 0) {
+		rc = posix_spawnattr_setflags(
+			&attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
+	}
+	pid_t pid;
+	if (rc == 0) {
+		rc = posix_spawnp(&pid, bin, NULL, &attr, args, environ);
+	}
+	posix_spawnattr_destroy(&attr);
+	if (rc != 0) {
+		fprintf(stderr, "sweetbgd: cannot spawn %s: %s\n", bin,
+			strerror(rc));
 	}
 }
 

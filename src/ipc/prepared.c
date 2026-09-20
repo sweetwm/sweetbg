@@ -6,16 +6,30 @@
 #include <unistd.h>
 
 #define MAX_PREPARE_DIMENSION 32768u
+#define BYTES_PER_PIXEL 4u
+
+bool sweetbg_prepared_buffer_size(
+	uint32_t width, uint32_t height, size_t *size_out) {
+	if (size_out == NULL || width == 0 || height == 0 ||
+		width > MAX_PREPARE_DIMENSION ||
+		height > MAX_PREPARE_DIMENSION) {
+		return false;
+	}
+	uint64_t size = (uint64_t)width * height * BYTES_PER_PIXEL;
+	if (size > INT32_MAX) {
+		return false;
+	}
+	*size_out = (size_t)size;
+	return true;
+}
 
 int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
 	enum sweetbg_fit fit, uint32_t width, uint32_t height, uint32_t color,
 	const struct sweetbg_placement *placement) {
-	if (width == 0 || height == 0 || width > MAX_PREPARE_DIMENSION ||
-		height > MAX_PREPARE_DIMENSION) {
+	size_t size;
+	if (!sweetbg_prepared_buffer_size(width, height, &size)) {
 		return -1;
 	}
-	size_t stride = (size_t)width * 4;
-	size_t size = stride * height;
 
 	int fd = memfd_create(
 		"sweetbg-wallpaper", MFD_CLOEXEC | MFD_ALLOW_SEALING);

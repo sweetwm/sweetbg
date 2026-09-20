@@ -26,6 +26,9 @@ struct sweetbg_prepared_buffer {
 	int fd;
 };
 
+bool sweetbg_prepared_buffer_size(
+	uint32_t width, uint32_t height, size_t *size_out);
+
 int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
 	enum sweetbg_fit fit, uint32_t width, uint32_t height, uint32_t color,
 	const struct sweetbg_placement *placement);

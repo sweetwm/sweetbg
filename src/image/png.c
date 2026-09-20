@@ -5,17 +5,6 @@
 
 #define BYTES_PER_PIXEL 4
 
-// Swap R and B and clear the pad byte: libpng gives RGBA, we store XRGB8888
-static void rgba_to_xrgb(uint8_t *pixels, size_t pixel_count) {
-	for (size_t i = 0; i < pixel_count; i++) {
-		uint8_t *p = pixels + i * BYTES_PER_PIXEL;
-		uint8_t r = p[0];
-		p[0] = p[2];
-		p[2] = r;
-		p[3] = 0;
-	}
-}
-
 bool sweetbg_decode_png(
 	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size) {
 	png_structp png =
@@ -53,7 +42,7 @@ bool sweetbg_decode_png(
 		return false;
 	}
 
-	// Normalize every input to 8-bit RGBA
+	// Normalize every input directly to 8-bit BGRX
 	int bit_depth = png_get_bit_depth(png, info);
 	int color_type = png_get_color_type(png, info);
 	if (bit_depth == 16) {
@@ -73,6 +62,8 @@ bool sweetbg_decode_png(
 		png_set_gray_to_rgb(png);
 	}
 	png_set_add_alpha(png, 0xff, PNG_FILLER_AFTER);
+	png_set_bgr(png);
+	png_set_interlace_handling(png);
 	png_read_update_info(png, info);
 
 	img->width = width;
@@ -93,6 +84,5 @@ bool sweetbg_decode_png(
 
 	free((void *)rows);
 	png_destroy_read_struct(&png, &info, NULL);
-	rgba_to_xrgb(img->pixels, (size_t)width * height);
 	return true;
 }

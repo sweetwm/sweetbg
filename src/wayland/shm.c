@@ -1,5 +1,6 @@
 #include "wayland/shm.h"
 
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -127,7 +128,11 @@ bool sweetbg_buffer_from_fd(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 
 	struct stat info;
 	if (fstat(fd, &info) != 0 || info.st_size < 0 ||
-		(size_t)info.st_size < size) {
+		!S_ISREG(info.st_mode) || (size_t)info.st_size < size) {
+		return false;
+	}
+	int seals = fcntl(fd, F_GET_SEALS);
+	if (seals < 0 || (seals & F_SEAL_SHRINK) == 0) {
 		return false;
 	}
 

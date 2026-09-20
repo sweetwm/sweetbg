@@ -1,5 +1,6 @@
 #include "ipc/prepared.h"
 
+#include <fcntl.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -16,7 +17,8 @@ int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
 	size_t stride = (size_t)width * 4;
 	size_t size = stride * height;
 
-	int fd = memfd_create("sweetbg-wallpaper", MFD_CLOEXEC);
+	int fd = memfd_create(
+		"sweetbg-wallpaper", MFD_CLOEXEC | MFD_ALLOW_SEALING);
 	if (fd < 0) {
 		return -1;
 	}
@@ -34,8 +36,12 @@ int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
 					      placement, width, height, data)
 				    : sweetbg_image_render(image, fit, width,
 					      height, color, data);
-	munmap(data, size);
-	if (!ok) {
+	if (munmap(data, size) != 0 || !ok) {
+		close(fd);
+		return -1;
+	}
+	int seals = F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL;
+	if (fcntl(fd, F_ADD_SEALS, seals) != 0) {
 		close(fd);
 		return -1;
 	}

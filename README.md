@@ -51,13 +51,6 @@ With systemd user services:
 systemctl --user enable --now sweetbgd.service
 ```
 
-If your session does not export Wayland variables to systemd, import them from
-your compositor startup:
-
-```sh
-systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
-```
-
 Set and manage wallpapers:
 
 ```sh
@@ -104,31 +97,17 @@ sweetbg reload
 sweetbg stop
 ```
 
-Output names come from `sweetbg query`. Fit modes are `cover`, `contain`,
-`center`, `tile`, and `span`. See [`sweetbg(1)`](doc/sweetbg.1.scd) for the full
-command reference.
+See [`sweetbg(1)`](doc/sweetbg.1.scd) for the full command reference
 
 Use `sweetbg doctor` to check the session environment, config file, socket and
 daemon reachability when Sweetbg does not start or a client command cannot
-connect.
-
-### Random wallpapers
-
-Pass a directory to `sweetbg img` to pick a random image from it. The choice is
-made once, so redrawing an output never re-rolls it. There is no built-in timer;
-rotate with a systemd user timer:
-
-```sh
-# rotate every 30 minutes
-systemd-run --user --on-active=30m --on-unit-active=30m \
-  sweetbg img ~/Pictures/Wallpapers/
-```
+connect
 
 ### Spanning outputs
 
 `span` stretches a single image across the whole monitor layout. It cannot be
 set for a single output with `--output` or in an `[output.NAME]` config
-section.
+section
 
 ```sh
 sweetbg set fit span
@@ -145,7 +124,7 @@ sweetbg query --json | jq -r '.outputs[0].colors[0]'
 ```
 
 Relatedly, `color = "auto"` (or `sweetbg set color auto`) fills the
-`contain`/`center` letterbox with the image's own dominant color.
+`contain`/`center` letterbox with the image's own dominant color
 
 ## Configuration
 
@@ -181,9 +160,6 @@ The man pages are the full reference:
 - [`sweetbg(1)`](doc/sweetbg.1.scd) - client commands, options, and fit modes
 - [`sweetbgd(1)`](doc/sweetbgd.1.scd) - daemon and its environment
 - [`sweetbg(5)`](doc/sweetbg.5.scd) - every config key
-
-Once installed, read them with `man sweetbg`, `man sweetbgd`, and
-`man 5 sweetbg`.
 
 ## Notes
 - Supported image formats: JPEG, PNG, and WebP

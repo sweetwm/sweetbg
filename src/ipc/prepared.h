@@ -15,7 +15,6 @@ struct sweetbg_output_info {
 	uint32_t generation;
 	int32_t scale;
 	enum sweetbg_fit fit;
-	bool has_generation;
 	struct sweetbg_layout_output logical;
 };
 

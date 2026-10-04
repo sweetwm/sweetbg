@@ -1,12 +1,12 @@
 #include "ipc/client.h"
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -15,7 +15,7 @@
 #include "ipc/prepared.h"
 #include "ipc/protocol.h"
 
-#define REPLY_TIMEOUT_SECONDS 5
+#define REPLY_TIMEOUT_MS 5000
 
 static void client_error(char *err, size_t err_size, const char *message) {
 	if (err != NULL && err_size > 0) {
@@ -63,12 +63,6 @@ static int connect_to_daemon(char *err, size_t err_size) {
 		close(fd);
 		return -1;
 	}
-
-	struct timeval timeout = {
-		.tv_sec = REPLY_TIMEOUT_SECONDS,
-		.tv_usec = 0,
-	};
-	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 	return fd;
 }
 
@@ -78,7 +72,7 @@ int sweetbg_client_request(
 	uint8_t response[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
 
-	if (sweetbg_client_raw_request(command, payload, payload_len, &type,
+	if (sweetbg_client_raw_request(command, payload, payload_len, -1, &type,
 		    response, &len, sizeof(response), NULL, 0) != 0) {
 		return 1;
 	}
@@ -91,54 +85,59 @@ int sweetbg_client_request(
 }
 
 int sweetbg_client_raw_request(uint8_t command, const void *payload,
-	uint32_t payload_len, uint8_t *type, void *response, uint32_t *len,
-	uint32_t max, char *err, size_t err_size) {
+	uint32_t payload_len, int pass_fd, uint8_t *type, void *response,
+	uint32_t *len, uint32_t max, char *err, size_t err_size) {
 	int fd = connect_to_daemon(err, err_size);
 	if (fd < 0) {
 		return -1;
 	}
 
-	if (!sweetbg_ipc_send_frame(fd, command, payload, payload_len)) {
+	if (!sweetbg_ipc_send_frame(
+		    fd, command, payload, payload_len, pass_fd)) {
 		client_error(err, err_size, "failed to send request");
 		close(fd);
 		return -1;
 	}
 
-	if (!sweetbg_ipc_recv_frame(fd, type, response, len, max)) {
+	int reply_fd = -1;
+	bool got = sweetbg_ipc_recv_frame(
+		fd, type, response, len, max, &reply_fd, REPLY_TIMEOUT_MS);
+	close(fd);
+	// daemon never replies with an fd, drop one rather than leak it
+	if (reply_fd >= 0) {
+		close(reply_fd);
+	}
+	if (!got) {
 		client_error(err, err_size, "no valid response from daemon");
-		close(fd);
 		return -1;
 	}
-	close(fd);
 	return 0;
 }
 
-static int query_outputs(struct sweetbg_output_info *list, int max,
-	enum sweetbg_fit *fit, uint32_t *color, bool *color_auto) {
-	*fit = SWEETBG_FIT_COVER;
-	*color = 0;
-	*color_auto = false;
-	int fd = connect_to_daemon(NULL, 0);
-	if (fd < 0) {
-		return -1;
-	}
-	if (!sweetbg_ipc_send_frame(fd, SWEETBG_CMD_QUERY_OUTPUTS, NULL, 0)) {
-		close(fd);
-		fprintf(stderr, "sweetbg: failed to query outputs\n");
-		return -1;
-	}
-
+// send one request and require an OK reply, failures are printed
+static bool request_ok(uint8_t command, const void *payload,
+	uint32_t payload_len, int pass_fd,
+	uint8_t response[SWEETBG_IPC_MAX_PAYLOAD], uint32_t *len) {
 	uint8_t type;
-	uint8_t resp[SWEETBG_IPC_MAX_PAYLOAD];
-	uint32_t len;
-	bool got = sweetbg_ipc_recv_frame(fd, &type, resp, &len, sizeof(resp));
-	close(fd);
-	if (!got) {
-		fprintf(stderr, "sweetbg: no response from daemon\n");
-		return -1;
+	if (sweetbg_client_raw_request(command, payload, payload_len, pass_fd,
+		    &type, response, len, SWEETBG_IPC_MAX_PAYLOAD, NULL,
+		    0) != 0) {
+		return false;
 	}
 	if (type != SWEETBG_STATUS_OK) {
-		fprintf(stderr, "sweetbg: %.*s\n", (int)len, resp);
+		fprintf(stderr, "sweetbg: %.*s\n", (int)*len, response);
+		return false;
+	}
+	return true;
+}
+
+static int query_outputs(struct sweetbg_output_info *list, int max,
+	uint32_t *color, bool *color_auto) {
+	*color = 0;
+	*color_auto = false;
+	uint8_t resp[SWEETBG_IPC_MAX_PAYLOAD];
+	uint32_t len;
+	if (!request_ok(SWEETBG_CMD_QUERY_OUTPUTS, NULL, 0, -1, resp, &len)) {
 		return -1;
 	}
 
@@ -146,92 +145,37 @@ static int query_outputs(struct sweetbg_output_info *list, int max,
 	memcpy(text, resp, len);
 	text[len] = '\0';
 
+	// daemon formats these from int32/uint32 fields, so sscanf never
+	// sees an out-of-range value
 	int count = 0;
-	char *line_save = NULL;
-	for (char *line = strtok_r(text, "\n", &line_save);
+	char *save = NULL;
+	for (char *line = strtok_r(text, "\n", &save);
 		line != NULL && count < max;
-		line = strtok_r(NULL, "\n", &line_save)) {
-		char *field_save = NULL;
-		const char *name = strtok_r(line, " ", &field_save);
-		if (name != NULL && strcmp(name, "meta") == 0) {
-			const char *fs = strtok_r(NULL, " ", &field_save);
-			const char *cs = strtok_r(NULL, " ", &field_save);
-			const char *as = strtok_r(NULL, " ", &field_save);
-			if (fs != NULL && cs != NULL) {
-				*fit = (enum sweetbg_fit)strtoul(fs, NULL, 10);
-				*color = (uint32_t)strtoul(cs, NULL, 10);
-			}
-			// Absent on an older daemon: default to a fixed colour
-			*color_auto = as != NULL && strtoul(as, NULL, 10) != 0;
+		line = strtok_r(NULL, "\n", &save)) {
+		unsigned auto_flag;
+		// meta: default fit (unused here), colour, auto flag
+		// NOLINTNEXTLINE(bugprone-unchecked-string-to-number-conversion)
+		if (sscanf(line, "meta %*u %" SCNu32 " %u", color,
+			    &auto_flag) == 2) {
+			*color_auto = auto_flag != 0;
 			continue;
 		}
-		const char *ws = strtok_r(NULL, " ", &field_save);
-		const char *hs = strtok_r(NULL, " ", &field_save);
-		const char *ss = strtok_r(NULL, " ", &field_save);
-		const char *fs = strtok_r(NULL, " ", &field_save);
-		const char *lxs = strtok_r(NULL, " ", &field_save);
-		const char *lys = strtok_r(NULL, " ", &field_save);
-		const char *lws = strtok_r(NULL, " ", &field_save);
-		const char *lhs = strtok_r(NULL, " ", &field_save);
-		const char *gs = strtok_r(NULL, " ", &field_save);
-		if (name == NULL || ws == NULL || hs == NULL || ss == NULL ||
-			strlen(name) >= sizeof(list[count].name)) {
+		// name, buffer w h, scale, fit, logical x y w h, generation
+		struct sweetbg_output_info *out = &list[count];
+		unsigned fit;
+		// NOLINTNEXTLINE(bugprone-unchecked-string-to-number-conversion)
+		if (sscanf(line,
+			    "%63s %" SCNu32 " %" SCNu32 " %" SCNd32
+			    " %u %" SCNd32 " %" SCNd32 " %" SCNu32 " %" SCNu32
+			    " %" SCNu32,
+			    out->name, &out->width, &out->height, &out->scale,
+			    &fit, &out->logical.x, &out->logical.y,
+			    &out->logical.w, &out->logical.h,
+			    &out->generation) != 10 ||
+			fit > SWEETBG_FIT_SPAN) {
 			continue;
 		}
-
-		char *end_w;
-		char *end_h;
-		char *end_s;
-		unsigned long w = strtoul(ws, &end_w, 10);
-		unsigned long h = strtoul(hs, &end_h, 10);
-		unsigned long s = strtoul(ss, &end_s, 10);
-		if (*end_w != '\0' || *end_h != '\0' || *end_s != '\0') {
-			continue;
-		}
-
-		memcpy(list[count].name, name, strlen(name) + 1);
-		list[count].width = (uint32_t)w;
-		list[count].height = (uint32_t)h;
-		list[count].scale = (int32_t)s;
-		list[count].fit = *fit;
-		list[count].generation = 0;
-		list[count].has_generation = false;
-		list[count].logical =
-			(struct sweetbg_layout_output){0, 0, 0, 0};
-		if (lxs != NULL && lys != NULL && lws != NULL && lhs != NULL) {
-			char *end_lx;
-			char *end_ly;
-			char *end_lw;
-			char *end_lh;
-			long lx = strtol(lxs, &end_lx, 10);
-			long ly = strtol(lys, &end_ly, 10);
-			unsigned long lw = strtoul(lws, &end_lw, 10);
-			unsigned long lh = strtoul(lhs, &end_lh, 10);
-			if (*end_lx == '\0' && *end_ly == '\0' &&
-				*end_lw == '\0' && *end_lh == '\0' &&
-				lx >= INT32_MIN && lx <= INT32_MAX &&
-				ly >= INT32_MIN && ly <= INT32_MAX) {
-				list[count].logical.x = (int32_t)lx;
-				list[count].logical.y = (int32_t)ly;
-				list[count].logical.w = (uint32_t)lw;
-				list[count].logical.h = (uint32_t)lh;
-			}
-		}
-		if (gs != NULL) {
-			char *end_g;
-			unsigned long g = strtoul(gs, &end_g, 10);
-			if (*end_g == '\0' && g <= UINT32_MAX) {
-				list[count].generation = (uint32_t)g;
-				list[count].has_generation = true;
-			}
-		}
-		if (fs != NULL) {
-			char *end_f;
-			unsigned long f = strtoul(fs, &end_f, 10);
-			if (*end_f == '\0' && f <= SWEETBG_FIT_SPAN) {
-				list[count].fit = (enum sweetbg_fit)f;
-			}
-		}
+		out->fit = (enum sweetbg_fit)fit;
 		count++;
 	}
 	return count;
@@ -242,8 +186,7 @@ static int send_prepared(const struct sweetbg_output_info *out, uint32_t mode,
 	size_t color_count) {
 	size_t name_len = strlen(out->name);
 	size_t path_len = strlen(path);
-	size_t total = 20 + name_len + 4 + path_len + 4 + color_count * 4 +
-		       (out->has_generation ? 4 : 0);
+	size_t total = 20 + name_len + 4 + path_len + 4 + color_count * 4 + 4;
 	if (total > SWEETBG_IPC_MAX_PAYLOAD) {
 		fprintf(stderr, "sweetbg: image request too long\n");
 		return 1;
@@ -269,36 +212,15 @@ static int send_prepared(const struct sweetbg_output_info *out, uint32_t mode,
 		sweetbg_put_u32(payload + off, colors[i]);
 		off += 4;
 	}
-	if (out->has_generation) {
-		sweetbg_put_u32(payload + off, out->generation);
-		off += 4;
-	}
+	sweetbg_put_u32(payload + off, out->generation);
+	off += 4;
 
-	int fd = connect_to_daemon(NULL, 0);
-	if (fd < 0) {
-		return 1;
-	}
-	if (!sweetbg_ipc_send_frame_fd(fd, SWEETBG_CMD_IMG_PREPARED, payload,
-		    (uint32_t)off, memfd)) {
-		close(fd);
-		fprintf(stderr, "sweetbg: failed to send image\n");
-		return 1;
-	}
-
-	uint8_t type;
 	uint8_t resp[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
-	bool got = sweetbg_ipc_recv_frame(fd, &type, resp, &len, sizeof(resp));
-	close(fd);
-	if (!got) {
-		fprintf(stderr, "sweetbg: no response from daemon\n");
-		return 1;
-	}
-	if (type != SWEETBG_STATUS_OK) {
-		fprintf(stderr, "sweetbg: %.*s\n", (int)len, resp);
-		return 1;
-	}
-	return 0;
+	return request_ok(SWEETBG_CMD_IMG_PREPARED, payload, (uint32_t)off,
+		       memfd, resp, &len)
+		       ? 0
+		       : 1;
 }
 
 static bool output_requested(const char *name, const char *output,
@@ -328,11 +250,10 @@ static int prepare_outputs(const char *path, const char *output,
 	const char *const *names, size_t name_count,
 	const char *const *skip_names, size_t skip_count, uint32_t mode) {
 	struct sweetbg_output_info outputs[SWEETBG_MAX_OUTPUTS];
-	enum sweetbg_fit fit;
 	uint32_t color;
 	bool color_auto;
 	int count = query_outputs(
-		outputs, SWEETBG_MAX_OUTPUTS, &fit, &color, &color_auto);
+		outputs, SWEETBG_MAX_OUTPUTS, &color, &color_auto);
 	if (count < 0) {
 		return 1;
 	}

@@ -448,7 +448,6 @@ struct prepared_request {
 	uint32_t colors[SWEETBG_MAX_PALETTE];
 	uint8_t color_count;
 	uint32_t generation;
-	bool has_generation;
 };
 
 static bool parse_prepared(
@@ -487,27 +486,20 @@ static bool parse_prepared(
 	req->path[path_len] = '\0';
 	off += path_len;
 
-	req->color_count = 0;
-	req->generation = 0;
-	req->has_generation = false;
-	if (off + 4 <= len) {
-		uint32_t n = sweetbg_get_u32(p + off);
-		off += 4;
-		if (n > SWEETBG_MAX_PALETTE || off + (size_t)n * 4 > len) {
-			free(req->path);
-			req->path = NULL;
-			return false;
-		}
-		for (uint32_t i = 0; i < n; i++) {
-			req->colors[i] = sweetbg_get_u32(p + off) & 0xffffffu;
-			off += 4;
-		}
-		req->color_count = (uint8_t)n;
-		if (off + 4 <= len) {
-			req->generation = sweetbg_get_u32(p + off);
-			req->has_generation = true;
-		}
+	// colour count, colours, generation, nothing may follow
+	uint32_t n = off + 4 <= len ? sweetbg_get_u32(p + off) : UINT32_MAX;
+	off += 4;
+	if (n > SWEETBG_MAX_PALETTE || off + (size_t)n * 4 + 4 != len) {
+		free(req->path);
+		req->path = NULL;
+		return false;
 	}
+	for (uint32_t i = 0; i < n; i++) {
+		req->colors[i] = sweetbg_get_u32(p + off) & 0xffffffu;
+		off += 4;
+	}
+	req->color_count = (uint8_t)n;
+	req->generation = sweetbg_get_u32(p + off);
 	return true;
 }
 
@@ -556,8 +548,7 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 		return SWEETBG_STATUS_ERR_IMAGE;
 	}
 
-	bool stale_generation =
-		req.has_generation && req.generation != match->generation;
+	bool stale_generation = req.generation != match->generation;
 	if (req.mode == SWEETBG_IMG_REPAINT &&
 		(stale_generation ||
 			strcmp(req.path, effective_path(daemon, match)) != 0)) {

@@ -56,17 +56,11 @@ void sweetbg_put_u32(uint8_t *p, uint32_t value);
 uint32_t sweetbg_get_u32(const uint8_t *p);
 
 bool sweetbg_ipc_socket_path(char *out, size_t out_size);
-bool sweetbg_ipc_read_full(int fd, void *buf, size_t n);
-bool sweetbg_ipc_write_full(int fd, const void *buf, size_t n);
+// pass_fd < 0 sends no fd
 bool sweetbg_ipc_send_frame(
-	int fd, uint8_t type, const void *payload, uint32_t len);
-bool sweetbg_ipc_recv_frame(
-	int fd, uint8_t *type, void *payload, uint32_t *len, uint32_t max);
-
-bool sweetbg_ipc_send_frame_fd(
 	int fd, uint8_t type, const void *payload, uint32_t len, int pass_fd);
 // timeout_ms covers the initial header and payload as one deadline
-bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
-	uint32_t *len, uint32_t max, int *out_fd, uint32_t timeout_ms);
+bool sweetbg_ipc_recv_frame(int fd, uint8_t *type, void *payload, uint32_t *len,
+	uint32_t max, int *out_fd, uint32_t timeout_ms);
 
 #endif

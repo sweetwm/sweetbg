@@ -123,17 +123,17 @@ void sweetbg_ipc_server_handle(struct sweetbg_ipc_server *server,
 	uint8_t payload[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
 	int fd = -1;
-	if (sweetbg_ipc_recv_frame_fd(client, &type, payload, &len,
+	if (sweetbg_ipc_recv_frame(client, &type, payload, &len,
 		    sizeof(payload), &fd, CLIENT_REQUEST_TIMEOUT_MS)) {
 		// Sized for a multi-output query response, capped by the frame
 		char message[SWEETBG_IPC_MAX_PAYLOAD] = {0};
 		uint8_t status = dispatch(data, type, payload, len, fd, message,
 			sizeof(message), stop);
 		sweetbg_ipc_send_frame(
-			client, status, message, (uint32_t)strlen(message));
+			client, status, message, (uint32_t)strlen(message), -1);
 	} else {
 		sweetbg_ipc_send_frame(
-			client, SWEETBG_STATUS_ERR_BAD_REQUEST, NULL, 0);
+			client, SWEETBG_STATUS_ERR_BAD_REQUEST, NULL, 0, -1);
 	}
 
 	// Single owner of the received fd: the handler used it during dispatch

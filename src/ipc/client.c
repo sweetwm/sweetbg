@@ -372,10 +372,6 @@ int sweetbg_client_set_image(const char *path, const char *output,
 		path, output, NULL, 0, skip_names, skip_count, mode);
 }
 
-int sweetbg_client_prepare_output(const char *name, const char *path) {
-	return sweetbg_client_prepare_outputs(path, &name, 1);
-}
-
 int sweetbg_client_prepare_outputs(
 	const char *path, const char *const *names, size_t name_count) {
 	return prepare_outputs(

@@ -134,7 +134,7 @@ void sweetbg_fit_placement(enum sweetbg_fit fit, uint32_t src_w, uint32_t src_h,
 
 static bool target_fits(uint32_t src_w, uint32_t src_h,
 	const struct sweetbg_decode_target *target) {
-	/* center and tile copy source pixels 1:1, so they need the full decode */
+	// center and tile copy source pixels 1:1, so they need the full decode
 	if (target->width == 0 || target->height == 0 ||
 		target->fit == SWEETBG_FIT_CENTER ||
 		target->fit == SWEETBG_FIT_TILE) {

@@ -36,8 +36,8 @@ static bool is_webp(const uint8_t *sig, size_t n) {
 }
 
 bool sweetbg_image_load(struct sweetbg_image *img, const char *path,
-	const struct sweetbg_image_load_options *options, char *err,
-	size_t err_size) {
+	const struct sweetbg_decode_target *targets, size_t target_count,
+	char *err, size_t err_size) {
 	img->width = 0;
 	img->height = 0;
 	img->pixels = NULL;
@@ -60,7 +60,8 @@ bool sweetbg_image_load(struct sweetbg_image *img, const char *path,
 	if (is_png(sig, got)) {
 		ok = sweetbg_decode_png(fp, img, err, err_size);
 	} else if (is_jpeg(sig, got)) {
-		ok = sweetbg_decode_jpeg(fp, img, options, err, err_size);
+		ok = sweetbg_decode_jpeg(
+			fp, img, targets, target_count, err, err_size);
 	} else if (is_webp(sig, got)) {
 		ok = sweetbg_decode_webp(fp, img, err, err_size);
 	} else {
@@ -227,28 +228,15 @@ bool sweetbg_image_render(const struct sweetbg_image *src, enum sweetbg_fit fit,
 		return false;
 	}
 
-	struct sweetbg_placement place;
-	switch (fit) {
-	case SWEETBG_FIT_TILE:
+	if (fit == SWEETBG_FIT_TILE) {
 		render_tile(src, out_w, out_h, dst);
 		return true;
-	case SWEETBG_FIT_CONTAIN:
-		fill_color(dst, out_w, out_h, color);
-		sweetbg_contain_rects(
-			src->width, src->height, out_w, out_h, &place);
-		break;
-	case SWEETBG_FIT_CENTER:
-		fill_color(dst, out_w, out_h, color);
-		sweetbg_center_rects(
-			src->width, src->height, out_w, out_h, &place);
-		break;
-	case SWEETBG_FIT_COVER:
-	default:
-		place.dst = (struct sweetbg_rect){0, 0, out_w, out_h};
-		sweetbg_cover_rect(
-			src->width, src->height, out_w, out_h, &place.src);
-		break;
 	}
-
+	if (fit == SWEETBG_FIT_CONTAIN || fit == SWEETBG_FIT_CENTER) {
+		fill_color(dst, out_w, out_h, color);
+	}
+	struct sweetbg_placement place;
+	sweetbg_fit_placement(
+		fit, src->width, src->height, out_w, out_h, &place);
 	return blit_placement(src, &place, out_w, dst);
 }

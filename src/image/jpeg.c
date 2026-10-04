@@ -43,8 +43,8 @@ static int eof_warning_code(const struct jpeg_error_mgr *errors) {
 }
 
 bool sweetbg_decode_jpeg(FILE *fp, struct sweetbg_image *img,
-	const struct sweetbg_image_load_options *options, char *err,
-	size_t err_size) {
+	const struct sweetbg_decode_target *targets, size_t target_count,
+	char *err, size_t err_size) {
 	struct jpeg_decompress_struct cinfo;
 	struct jpeg_guard guard = {0};
 	cinfo.err = jpeg_std_error(&guard.base);
@@ -82,8 +82,8 @@ bool sweetbg_decode_jpeg(FILE *fp, struct sweetbg_image *img,
 		i++) {
 		cinfo.scale_denom = denominators[i];
 		jpeg_calc_output_dimensions(&cinfo);
-		if (sweetbg_decode_targets_fit(
-			    cinfo.output_width, cinfo.output_height, options)) {
+		if (sweetbg_decode_targets_fit(cinfo.output_width,
+			    cinfo.output_height, targets, target_count)) {
 			break;
 		}
 		cinfo.scale_denom = 1;

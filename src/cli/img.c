@@ -71,7 +71,8 @@ static int apply_image(const char *arg, const char *output, bool persist,
 		return rc;
 	}
 	char err[256];
-	if (!sweetbg_config_persist_image(output, resolved, err, sizeof(err))) {
+	if (!sweetbg_config_persist(
+		    output, "image", resolved, err, sizeof(err))) {
 		fprintf(stderr,
 			"sweetbg: applied but could not save config: %s\n",
 			err);

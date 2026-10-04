@@ -232,7 +232,7 @@ static void doctor_check_socket_and_daemon(int *warnings, int *failures) {
 	uint8_t response[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
 	char err[256];
-	if (sweetbg_client_raw_request(SWEETBG_CMD_QUERY, NULL, 0, &type,
+	if (sweetbg_client_raw_request(SWEETBG_CMD_QUERY, NULL, 0, -1, &type,
 		    response, &len, sizeof(response), err, sizeof(err)) != 0) {
 		doctor_line(DOCTOR_FAIL, "daemon", "%s", err);
 		doctor_count(DOCTOR_FAIL, warnings, failures);

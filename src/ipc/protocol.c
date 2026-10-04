@@ -34,26 +34,7 @@ bool sweetbg_ipc_socket_path(char *out, size_t out_size) {
 	return true;
 }
 
-bool sweetbg_ipc_read_full(int fd, void *buf, size_t n) {
-	uint8_t *p = buf;
-	size_t got = 0;
-	while (got < n) {
-		ssize_t r = recv(fd, p + got, n - got, 0);
-		if (r < 0) {
-			if (errno == EINTR) {
-				continue;
-			}
-			return false;
-		}
-		if (r == 0) {
-			return false;
-		}
-		got += (size_t)r;
-	}
-	return true;
-}
-
-bool sweetbg_ipc_write_full(int fd, const void *buf, size_t n) {
+static bool write_full(int fd, const void *buf, size_t n) {
 	const uint8_t *p = buf;
 	size_t sent = 0;
 	while (sent < n) {
@@ -74,56 +55,10 @@ static void fill_header(uint8_t *header, uint8_t type, uint32_t len) {
 	header[1] = type;
 	header[2] = 0;
 	header[3] = 0;
-	header[4] = (uint8_t)(len & 0xff);
-	header[5] = (uint8_t)((len >> 8) & 0xff);
-	header[6] = (uint8_t)((len >> 16) & 0xff);
-	header[7] = (uint8_t)((len >> 24) & 0xff);
+	sweetbg_put_u32(header + 4, len);
 }
 
 bool sweetbg_ipc_send_frame(
-	int fd, uint8_t type, const void *payload, uint32_t len) {
-	if (len > SWEETBG_IPC_MAX_PAYLOAD) {
-		return false;
-	}
-
-	uint8_t header[SWEETBG_IPC_HEADER_SIZE];
-	fill_header(header, type, len);
-
-	if (!sweetbg_ipc_write_full(fd, header, sizeof(header))) {
-		return false;
-	}
-	if (len > 0 && !sweetbg_ipc_write_full(fd, payload, len)) {
-		return false;
-	}
-	return true;
-}
-
-bool sweetbg_ipc_recv_frame(
-	int fd, uint8_t *type, void *payload, uint32_t *len, uint32_t max) {
-	uint8_t header[SWEETBG_IPC_HEADER_SIZE];
-	if (!sweetbg_ipc_read_full(fd, header, sizeof(header))) {
-		return false;
-	}
-	if (header[0] != SWEETBG_IPC_VERSION) {
-		return false;
-	}
-
-	uint32_t plen = (uint32_t)header[4] | ((uint32_t)header[5] << 8) |
-			((uint32_t)header[6] << 16) |
-			((uint32_t)header[7] << 24);
-	if (plen > max || plen > SWEETBG_IPC_MAX_PAYLOAD) {
-		return false;
-	}
-	if (plen > 0 && !sweetbg_ipc_read_full(fd, payload, plen)) {
-		return false;
-	}
-
-	*type = header[1];
-	*len = plen;
-	return true;
-}
-
-bool sweetbg_ipc_send_frame_fd(
 	int fd, uint8_t type, const void *payload, uint32_t len, int pass_fd) {
 	if (len > SWEETBG_IPC_MAX_PAYLOAD) {
 		return false;
@@ -166,8 +101,7 @@ bool sweetbg_ipc_send_frame_fd(
 	}
 
 	if ((size_t)sent < total) {
-		return sweetbg_ipc_write_full(
-			fd, buffer + sent, total - (size_t)sent);
+		return write_full(fd, buffer + sent, total - (size_t)sent);
 	}
 	return true;
 }
@@ -263,8 +197,8 @@ static ssize_t recvmsg_until(
 	}
 }
 
-bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
-	uint32_t *len, uint32_t max, int *out_fd, uint32_t timeout_ms) {
+bool sweetbg_ipc_recv_frame(int fd, uint8_t *type, void *payload, uint32_t *len,
+	uint32_t max, int *out_fd, uint32_t timeout_ms) {
 	*out_fd = -1;
 	struct timespec deadline;
 	if (!make_deadline(&deadline, timeout_ms)) {
@@ -328,9 +262,7 @@ bool sweetbg_ipc_recv_frame_fd(int fd, uint8_t *type, void *payload,
 		goto fail;
 	}
 
-	uint32_t plen = (uint32_t)header[4] | ((uint32_t)header[5] << 8) |
-			((uint32_t)header[6] << 16) |
-			((uint32_t)header[7] << 24);
+	uint32_t plen = sweetbg_get_u32(header + 4);
 	if (plen > max || plen > SWEETBG_IPC_MAX_PAYLOAD) {
 		goto fail;
 	}

@@ -6,7 +6,6 @@
 #include <stdint.h>
 
 #include "config/config.h"
-#include "image/decode_scale.h"
 #include "image/fit.h"
 
 struct sweetbg_image {
@@ -15,11 +14,12 @@ struct sweetbg_image {
 	uint8_t *pixels;
 };
 
+// targets size a reduced JPEG decode, NULL or 0 decodes at full size
 bool sweetbg_image_load(struct sweetbg_image *img, const char *path,
-	const struct sweetbg_image_load_options *options, char *err,
-	size_t err_size);
+	const struct sweetbg_decode_target *targets, size_t target_count,
+	char *err, size_t err_size);
 
-// Free decoded pixels. Idempotent
+// free decoded pixels. Idempotent
 void sweetbg_image_free(struct sweetbg_image *img);
 
 bool sweetbg_image_render(const struct sweetbg_image *src, enum sweetbg_fit fit,

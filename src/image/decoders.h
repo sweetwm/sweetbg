@@ -12,8 +12,8 @@ bool sweetbg_image_dimensions_ok(uint32_t width, uint32_t height);
 bool sweetbg_decode_png(
 	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size);
 bool sweetbg_decode_jpeg(FILE *fp, struct sweetbg_image *img,
-	const struct sweetbg_image_load_options *options, char *err,
-	size_t err_size);
+	const struct sweetbg_decode_target *targets, size_t target_count,
+	char *err, size_t err_size);
 bool sweetbg_decode_webp(
 	FILE *fp, struct sweetbg_image *img, char *err, size_t err_size);
 

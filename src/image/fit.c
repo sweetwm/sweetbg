@@ -112,3 +112,55 @@ void sweetbg_center_rects(uint32_t src_w, uint32_t src_h, uint32_t out_w,
 	out->dst.x = (out_w - vis_w) / 2;
 	out->dst.y = (out_h - vis_h) / 2;
 }
+
+void sweetbg_fit_placement(enum sweetbg_fit fit, uint32_t src_w, uint32_t src_h,
+	uint32_t out_w, uint32_t out_h, struct sweetbg_placement *out) {
+	switch (fit) {
+	case SWEETBG_FIT_CONTAIN:
+		sweetbg_contain_rects(src_w, src_h, out_w, out_h, out);
+		break;
+	case SWEETBG_FIT_CENTER:
+		sweetbg_center_rects(src_w, src_h, out_w, out_h, out);
+		break;
+	case SWEETBG_FIT_COVER:
+	case SWEETBG_FIT_TILE:
+	case SWEETBG_FIT_SPAN:
+	default:
+		out->dst = (struct sweetbg_rect){0, 0, out_w, out_h};
+		sweetbg_cover_rect(src_w, src_h, out_w, out_h, &out->src);
+		break;
+	}
+}
+
+static bool target_fits(uint32_t src_w, uint32_t src_h,
+	const struct sweetbg_decode_target *target) {
+	// center and tile copy source pixels 1:1, so they need the full decode
+	if (target->width == 0 || target->height == 0 ||
+		target->fit == SWEETBG_FIT_CENTER ||
+		target->fit == SWEETBG_FIT_TILE) {
+		return false;
+	}
+	struct sweetbg_placement place;
+	if (target->fit == SWEETBG_FIT_SPAN) {
+		sweetbg_span_rects(src_w, src_h, target->layout_width,
+			target->layout_height, &target->slice, target->width,
+			target->height, &place);
+	} else {
+		sweetbg_fit_placement(target->fit, src_w, src_h, target->width,
+			target->height, &place);
+	}
+	return place.src.w >= place.dst.w && place.src.h >= place.dst.h;
+}
+
+bool sweetbg_decode_targets_fit(uint32_t src_w, uint32_t src_h,
+	const struct sweetbg_decode_target *targets, size_t count) {
+	if (targets == NULL || count == 0) {
+		return false;
+	}
+	for (size_t i = 0; i < count; i++) {
+		if (!target_fits(src_w, src_h, &targets[i])) {
+			return false;
+		}
+	}
+	return true;
+}

@@ -296,13 +296,10 @@ static int prepare_outputs(const char *path, const char *output,
 				&targets[target_count++], outputs, count, i);
 		}
 	}
-	const struct sweetbg_image_load_options options = {
-		.targets = targets,
-		.target_count = target_count,
-	};
 	struct sweetbg_image image;
 	char err[128];
-	if (!sweetbg_image_load(&image, path, &options, err, sizeof(err))) {
+	if (!sweetbg_image_load(
+		    &image, path, targets, target_count, err, sizeof(err))) {
 		fprintf(stderr, "sweetbg: %s\n", err);
 		return 1;
 	}

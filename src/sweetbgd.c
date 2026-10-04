@@ -72,19 +72,6 @@ static struct assignment *assignment_for(
 	return NULL;
 }
 
-static const struct assignment *const_assignment_for(
-	const struct daemon *daemon, const char *name) {
-	if (name == NULL) {
-		return NULL;
-	}
-	for (size_t i = 0; i < daemon->assignment_count; i++) {
-		if (strcmp(daemon->assignments[i].name, name) == 0) {
-			return &daemon->assignments[i];
-		}
-	}
-	return NULL;
-}
-
 static struct assignment *ensure_assignment(
 	struct daemon *daemon, const char *name) {
 	struct assignment *entry = assignment_for(daemon, name);
@@ -118,7 +105,7 @@ static bool set_blank_assignment(struct daemon *daemon, const char *name) {
 		free(path);
 		return false;
 	}
-	// A blank output shows no image, so it must report no colours
+	// blank output shows no image, so it must report no colours
 	struct assignment *entry = assignment_for(daemon, name);
 	entry->palette.count = 0;
 	return true;
@@ -228,9 +215,9 @@ static bool ensure_surfaces(struct sweetbg_registry *reg) {
 }
 
 static const char *effective_path(
-	const struct daemon *daemon, const struct sweetbg_output *output) {
+	struct daemon *daemon, const struct sweetbg_output *output) {
 	const struct assignment *assigned =
-		const_assignment_for(daemon, output->name);
+		assignment_for(daemon, output->name);
 	if (assigned != NULL && assigned->path != NULL) {
 		return assigned->path;
 	}
@@ -238,17 +225,17 @@ static const char *effective_path(
 }
 
 static enum sweetbg_fit effective_fit(
-	const struct daemon *daemon, const struct sweetbg_output *output) {
+	struct daemon *daemon, const struct sweetbg_output *output) {
 	const struct assignment *assigned =
-		const_assignment_for(daemon, output->name);
+		assignment_for(daemon, output->name);
 	return assigned != NULL && assigned->has_fit ? assigned->fit
 						     : daemon->fit;
 }
 
 static const struct palette *effective_palette(
-	const struct daemon *daemon, const struct sweetbg_output *output) {
+	struct daemon *daemon, const struct sweetbg_output *output) {
 	const struct assignment *assigned =
-		const_assignment_for(daemon, output->name);
+		assignment_for(daemon, output->name);
 	return assigned != NULL && assigned->path != NULL
 		       ? &assigned->palette
 		       : &daemon->default_palette;
@@ -406,17 +393,14 @@ static void reconcile_paint(struct daemon *daemon) {
 				paint_background(daemon, output);
 			}
 			output->surface.needs_repaint = false;
-			if (output->name == NULL) {
+			// The client sees at most MAX_QUERY_OUTPUTS outputs, so
+			// one past the cap could not be prepared anyway
+			if (output->name == NULL ||
+				target_count >= MAX_QUERY_OUTPUTS) {
 				continue;
 			}
-			if (target_count < MAX_QUERY_OUTPUTS) {
-				targets[target_count++] =
-					(struct repaint_target){
-						output->name, path};
-			} else {
-				const char *name = output->name;
-				spawn_prepare_set(path, &name, 1);
-			}
+			targets[target_count++] =
+				(struct repaint_target){output->name, path};
 		}
 	}
 
@@ -645,51 +629,23 @@ static uint8_t handle_query(
 		const char *name =
 			output->name != NULL ? output->name : "(unnamed)";
 		const struct assignment *assigned =
-			const_assignment_for(daemon, output->name);
+			assignment_for(daemon, output->name);
 		const bool has_image =
 			assigned != NULL && assigned->path != NULL;
 		const bool has_fit = assigned != NULL && assigned->has_fit;
-		if (has_image && has_fit) {
-			if (assigned->path[0] == '\0') {
-				append_line(message, message_size, &off,
-					"%s: %dx%d scale %d "
-					"(blank, fit: %s)\n",
-					name, output->pixel_width,
-					output->pixel_height, output->scale,
-					sweetbg_fit_name(assigned->fit));
-			} else {
-				append_line(message, message_size, &off,
-					"%s: %dx%d scale %d "
-					"(override: %s, fit: %s)\n",
-					name, output->pixel_width,
-					output->pixel_height, output->scale,
-					assigned->path,
-					sweetbg_fit_name(assigned->fit));
-			}
-		} else if (has_image) {
-			if (assigned->path[0] == '\0') {
-				append_line(message, message_size, &off,
-					"%s: %dx%d scale %d (blank)\n", name,
-					output->pixel_width,
-					output->pixel_height, output->scale);
-			} else {
-				append_line(message, message_size, &off,
-					"%s: %dx%d scale %d (override: %s)\n",
-					name, output->pixel_width,
-					output->pixel_height, output->scale,
-					assigned->path);
-			}
-		} else if (has_fit) {
-			append_line(message, message_size, &off,
-				"%s: %dx%d scale %d (fit: %s)\n", name,
-				output->pixel_width, output->pixel_height,
-				output->scale, sweetbg_fit_name(assigned->fit));
-		} else {
-			append_line(message, message_size, &off,
-				"%s: %dx%d scale %d\n", name,
-				output->pixel_width, output->pixel_height,
-				output->scale);
-		}
+		const bool tagged = has_image || has_fit;
+		const char *image = !has_image			? ""
+				    : assigned->path[0] == '\0' ? "blank"
+								: "override: ";
+		append_line(message, message_size, &off,
+			"%s: %dx%d scale %d%s%s%s%s%s%s%s\n", name,
+			output->pixel_width, output->pixel_height,
+			output->scale, tagged ? " (" : "", image,
+			has_image ? assigned->path : "",
+			has_image && has_fit ? ", " : "",
+			has_fit ? "fit: " : "",
+			has_fit ? sweetbg_fit_name(assigned->fit) : "",
+			tagged ? ")" : "");
 	}
 
 	// Drop the trailing newline; the client prints its own
@@ -712,7 +668,7 @@ static uint8_t handle_query_json(
 		}
 
 		const struct assignment *assigned =
-			const_assignment_for(daemon, output->name);
+			assignment_for(daemon, output->name);
 		const bool has_image =
 			assigned != NULL && assigned->path != NULL;
 		const bool has_fit = assigned != NULL && assigned->has_fit;

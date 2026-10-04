@@ -15,8 +15,6 @@ int sweetbg_client_raw_request(uint8_t command, const void *payload,
 int sweetbg_client_set_image(const char *path, const char *output,
 	const char *const *skip_names, size_t skip_count);
 
-int sweetbg_client_prepare_output(const char *name, const char *path);
-
 int sweetbg_client_prepare_outputs(
 	const char *path, const char *const *names, size_t name_count);
 

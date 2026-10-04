@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include "cli/flags.h"
 #include "config/config_write.h"
 #include "image/pick.h"
 #include "ipc/client.h"
@@ -27,10 +28,6 @@ struct img_args {
 	struct img_override overrides[MAX_IMG_OVERRIDES];
 	int override_count;
 };
-
-static bool valid_output_name(const char *output) {
-	return output != NULL && output[0] != '\0' && strlen(output) <= 63;
-}
 
 static int apply_image(const char *arg, const char *output, bool persist,
 	const char *const *skip_names, size_t skip_count, char *resolved_out) {
@@ -58,10 +55,6 @@ static int apply_image(const char *arg, const char *output, bool persist,
 		memcpy(resolved, picked, strlen(picked) + 1);
 	}
 
-	if (output != NULL && !valid_output_name(output)) {
-		fprintf(stderr, "sweetbg: invalid --output name\n");
-		return 2;
-	}
 	if (resolved_out != NULL) {
 		memcpy(resolved_out, resolved, strlen(resolved) + 1);
 	}
@@ -96,21 +89,12 @@ static bool is_override_token(const char *arg, struct img_override *out) {
 static int parse_args(int argc, char **argv, struct img_args *args) {
 	for (int i = 2; i < argc; i++) {
 		const char *a = argv[i];
-		if (strcmp(a, "-p") == 0 || strcmp(a, "--persist") == 0) {
-			args->persist = true;
-			continue;
+		int flag = sweetbg_cli_target_flag(
+			argc, argv, &i, &args->flag_output, &args->persist);
+		if (flag < 0) {
+			return 2;
 		}
-		if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
-			if (i + 1 >= argc) {
-				fprintf(stderr,
-					"sweetbg: --output needs a name\n");
-				return 2;
-			}
-			args->flag_output = argv[++i];
-			continue;
-		}
-		if (strncmp(a, "--output=", 9) == 0) {
-			args->flag_output = a + 9;
+		if (flag > 0) {
 			continue;
 		}
 		if (a[0] == '-' && a[1] != '\0') {
@@ -198,8 +182,9 @@ int sweetbg_cmd_img(int argc, char **argv) {
 			// Restore the default only if this override did not
 			// stick; a successful or ambiguous apply is rejected as
 			// superseded
-			(void)sweetbg_client_prepare_output(
-				names[i], default_resolved);
+			const char *name = names[i];
+			(void)sweetbg_client_prepare_outputs(
+				default_resolved, &name, 1);
 		}
 	}
 	return rc;

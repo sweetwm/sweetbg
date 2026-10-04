@@ -2,16 +2,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cli/flags.h"
 #include "cli/img.h"
 #include "config/config.h"
 #include "config/config_write.h"
 #include "doctor/doctor.h"
 #include "ipc/client.h"
 #include "ipc/protocol.h"
-
-static bool valid_output_arg(const char *output) {
-	return output != NULL && output[0] != '\0' && strlen(output) <= 63;
-}
 
 static int cmd_set(int argc, char **argv) {
 	const char *field = NULL;
@@ -20,18 +17,15 @@ static int cmd_set(int argc, char **argv) {
 	bool persist = false;
 	for (int i = 2; i < argc; i++) {
 		const char *a = argv[i];
-		if (strcmp(a, "-p") == 0 || strcmp(a, "--persist") == 0) {
-			persist = true;
-		} else if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
-			if (i + 1 >= argc) {
-				fprintf(stderr,
-					"sweetbg: --output needs a name\n");
-				return 2;
-			}
-			output = argv[++i];
-		} else if (strncmp(a, "--output=", 9) == 0) {
-			output = a + 9;
-		} else if (field == NULL) {
+		int flag = sweetbg_cli_target_flag(
+			argc, argv, &i, &output, &persist);
+		if (flag < 0) {
+			return 2;
+		}
+		if (flag > 0) {
+			continue;
+		}
+		if (field == NULL) {
 			field = a;
 		} else if (value == NULL) {
 			value = a;
@@ -44,10 +38,6 @@ static int cmd_set(int argc, char **argv) {
 		fprintf(stderr, "usage: sweetbg set fit <mode> | "
 				"color <#rrggbb|auto> [--output <name>] "
 				"[--persist]\n");
-		return 2;
-	}
-	if (output != NULL && !valid_output_arg(output)) {
-		fprintf(stderr, "sweetbg: invalid --output name\n");
 		return 2;
 	}
 
@@ -159,18 +149,15 @@ static int cmd_clear(int argc, char **argv) {
 
 	for (int i = 2; i < argc; i++) {
 		const char *a = argv[i];
-		if (strcmp(a, "-p") == 0 || strcmp(a, "--persist") == 0) {
-			persist = true;
-		} else if (strcmp(a, "-o") == 0 || strcmp(a, "--output") == 0) {
-			if (i + 1 >= argc) {
-				fprintf(stderr,
-					"sweetbg: --output needs a name\n");
-				return 2;
-			}
-			output = argv[++i];
-		} else if (strncmp(a, "--output=", 9) == 0) {
-			output = a + 9;
-		} else if (strcmp(a, "--image") == 0) {
+		int flag = sweetbg_cli_target_flag(
+			argc, argv, &i, &output, &persist);
+		if (flag < 0) {
+			return 2;
+		}
+		if (flag > 0) {
+			continue;
+		}
+		if (strcmp(a, "--image") == 0) {
 			flags |= SWEETBG_CLEAR_IMAGE;
 		} else if (strcmp(a, "--fit") == 0) {
 			flags |= SWEETBG_CLEAR_FIT;
@@ -183,10 +170,6 @@ static int cmd_clear(int argc, char **argv) {
 		}
 	}
 
-	if (output != NULL && !valid_output_arg(output)) {
-		fprintf(stderr, "sweetbg: invalid --output name\n");
-		return 2;
-	}
 	if ((flags & SWEETBG_CLEAR_BLANK) != 0 && output == NULL) {
 		fprintf(stderr, "sweetbg: --blank requires --output <name>\n");
 		return 2;
@@ -313,14 +296,6 @@ int main(int argc, char **argv) {
 
 	if (strcmp(cmd, "clear") == 0) {
 		return cmd_clear(argc, argv);
-	}
-	if (strcmp(cmd, "prepare") == 0) {
-		if (argc < 4) {
-			fprintf(stderr,
-				"usage: sweetbg prepare <output> <path>\n");
-			return 2;
-		}
-		return sweetbg_client_prepare_output(argv[2], argv[3]);
 	}
 	if (strcmp(cmd, "prepare-set") == 0) {
 		if (argc < 4) {

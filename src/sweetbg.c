@@ -118,12 +118,8 @@ static int cmd_set(int argc, char **argv) {
 		return rc;
 	}
 	char err[256];
-	bool saved = output == NULL
-			     ? sweetbg_config_persist_setting(
-				       field, persist_value, err, sizeof(err))
-			     : sweetbg_config_persist_output_setting(output,
-				       field, persist_value, err, sizeof(err));
-	if (!saved) {
+	if (!sweetbg_config_persist(
+		    output, field, persist_value, err, sizeof(err))) {
 		fprintf(stderr,
 			"sweetbg: applied but could not save config: %s\n",
 			err);
@@ -134,23 +130,20 @@ static int cmd_set(int argc, char **argv) {
 
 static int persist_clear(uint32_t flags, const char *output) {
 	char err[256];
-	if ((flags & SWEETBG_CLEAR_BLANK) != 0 &&
-		!sweetbg_config_persist_blank_output(
-			output, err, sizeof(err))) {
-		fprintf(stderr,
-			"sweetbg: applied but could not save config: %s\n",
-			err);
-		return 1;
+	bool ok = true;
+	if ((flags & SWEETBG_CLEAR_BLANK) != 0) {
+		ok = sweetbg_config_persist(
+			output, "image", "", err, sizeof(err));
 	}
-	if ((flags & SWEETBG_CLEAR_IMAGE) != 0 &&
-		!sweetbg_config_persist_clear_image(output, err, sizeof(err))) {
-		fprintf(stderr,
-			"sweetbg: applied but could not save config: %s\n",
-			err);
-		return 1;
+	if (ok && (flags & SWEETBG_CLEAR_IMAGE) != 0) {
+		ok = sweetbg_config_persist(
+			output, "image", NULL, err, sizeof(err));
 	}
-	if ((flags & SWEETBG_CLEAR_FIT) != 0 &&
-		!sweetbg_config_persist_clear_fit(output, err, sizeof(err))) {
+	if (ok && (flags & SWEETBG_CLEAR_FIT) != 0) {
+		ok = sweetbg_config_persist(
+			output, "fit", NULL, err, sizeof(err));
+	}
+	if (!ok) {
 		fprintf(stderr,
 			"sweetbg: applied but could not save config: %s\n",
 			err);

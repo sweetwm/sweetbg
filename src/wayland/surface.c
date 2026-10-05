@@ -57,18 +57,7 @@ bool sweetbg_surface_create(struct sweetbg_surface *surface,
 	struct zwlr_layer_shell_v1 *layer_shell, struct wl_output *output,
 	struct wp_viewporter *viewporter,
 	struct wp_fractional_scale_manager_v1 *fractional_manager) {
-	surface->wl_surface = NULL;
-	surface->layer_surface = NULL;
-	surface->width = 0;
-	surface->height = 0;
-	surface->configured = false;
-	surface->needs_repaint = false;
-	surface->has_content = false;
-	surface->buffer = NULL;
-	surface->retired_buffers = NULL;
-	surface->viewport = NULL;
-	surface->fractional = NULL;
-	surface->fractional_scale = 0;
+	*surface = (struct sweetbg_surface){0};
 
 	surface->wl_surface = wl_compositor_create_surface(compositor);
 	if (surface->wl_surface == NULL) {

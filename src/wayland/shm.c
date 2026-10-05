@@ -21,13 +21,8 @@ static const struct wl_buffer_listener buffer_listener = {
 
 bool sweetbg_buffer_wrap(struct sweetbg_buffer *buffer,
 	struct wl_buffer *wl_buffer, uint32_t width, uint32_t height) {
-	buffer->wl_buffer = wl_buffer;
-	buffer->data = NULL;
-	buffer->size = 0;
-	buffer->width = width;
-	buffer->height = height;
-	buffer->released = false;
-	buffer->next = NULL;
+	*buffer = (struct sweetbg_buffer){
+		.wl_buffer = wl_buffer, .width = width, .height = height};
 
 	if (wl_buffer == NULL || wl_buffer_add_listener(wl_buffer,
 					 &buffer_listener, buffer) != 0) {
@@ -56,13 +51,7 @@ static bool buffer_size(uint32_t width, uint32_t height, uint32_t *stride_out,
 
 bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 	uint32_t width, uint32_t height) {
-	buffer->wl_buffer = NULL;
-	buffer->data = NULL;
-	buffer->size = 0;
-	buffer->width = width;
-	buffer->height = height;
-	buffer->released = false;
-	buffer->next = NULL;
+	*buffer = (struct sweetbg_buffer){.width = width, .height = height};
 
 	uint32_t stride;
 	size_t size;
@@ -112,13 +101,7 @@ bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 
 bool sweetbg_buffer_from_fd(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 	int fd, uint32_t width, uint32_t height) {
-	buffer->wl_buffer = NULL;
-	buffer->data = NULL;
-	buffer->size = 0;
-	buffer->width = width;
-	buffer->height = height;
-	buffer->released = false;
-	buffer->next = NULL;
+	*buffer = (struct sweetbg_buffer){.width = width, .height = height};
 
 	uint32_t stride;
 	size_t size;

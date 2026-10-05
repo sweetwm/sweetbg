@@ -7,20 +7,16 @@
 #define DEFAULT_COLOR 0x1e1e2e
 #define CONFIG_LINE_MAX (PATH_MAX + 64)
 
+static const char *const fit_names[] = {
+	[SWEETBG_FIT_COVER] = "cover",
+	[SWEETBG_FIT_CONTAIN] = "contain",
+	[SWEETBG_FIT_CENTER] = "center",
+	[SWEETBG_FIT_TILE] = "tile",
+	[SWEETBG_FIT_SPAN] = "span",
+};
+
 const char *sweetbg_fit_name(enum sweetbg_fit fit) {
-	switch (fit) {
-	case SWEETBG_FIT_CONTAIN:
-		return "contain";
-	case SWEETBG_FIT_CENTER:
-		return "center";
-	case SWEETBG_FIT_TILE:
-		return "tile";
-	case SWEETBG_FIT_SPAN:
-		return "span";
-	case SWEETBG_FIT_COVER:
-		break;
-	}
-	return "cover";
+	return (unsigned)fit <= SWEETBG_FIT_SPAN ? fit_names[fit] : "cover";
 }
 
 bool sweetbg_fit_is_global_only(enum sweetbg_fit fit) {
@@ -28,20 +24,13 @@ bool sweetbg_fit_is_global_only(enum sweetbg_fit fit) {
 }
 
 bool sweetbg_fit_from_name(const char *name, enum sweetbg_fit *out) {
-	if (strcmp(name, "cover") == 0) {
-		*out = SWEETBG_FIT_COVER;
-	} else if (strcmp(name, "contain") == 0) {
-		*out = SWEETBG_FIT_CONTAIN;
-	} else if (strcmp(name, "center") == 0) {
-		*out = SWEETBG_FIT_CENTER;
-	} else if (strcmp(name, "tile") == 0) {
-		*out = SWEETBG_FIT_TILE;
-	} else if (strcmp(name, "span") == 0) {
-		*out = SWEETBG_FIT_SPAN;
-	} else {
-		return false;
+	for (unsigned i = 0; i <= SWEETBG_FIT_SPAN; i++) {
+		if (strcmp(name, fit_names[i]) == 0) {
+			*out = (enum sweetbg_fit)i;
+			return true;
+		}
 	}
-	return true;
+	return false;
 }
 
 void sweetbg_config_defaults(struct sweetbg_config *cfg) {

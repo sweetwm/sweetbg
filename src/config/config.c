@@ -95,32 +95,12 @@ static bool parse_string(const char *value, char *out, size_t out_size) {
 	return true;
 }
 
-static int hex_value(char c) {
-	if (c >= '0' && c <= '9') {
-		return c - '0';
-	}
-	if (c >= 'a' && c <= 'f') {
-		return c - 'a' + 10;
-	}
-	if (c >= 'A' && c <= 'F') {
-		return c - 'A' + 10;
-	}
-	return -1;
-}
-
 bool sweetbg_config_parse_color(const char *s, uint32_t *out) {
-	if (strlen(s) != 7 || s[0] != '#') {
+	if (strlen(s) != 7 || s[0] != '#' ||
+		strspn(s + 1, "0123456789abcdefABCDEF") != 6) {
 		return false;
 	}
-	uint32_t value = 0;
-	for (int i = 1; i <= 6; i++) {
-		int digit = hex_value(s[i]);
-		if (digit < 0) {
-			return false;
-		}
-		value = (value << 4) | (uint32_t)digit;
-	}
-	*out = value;
+	*out = (uint32_t)strtoul(s + 1, NULL, 16);
 	return true;
 }
 

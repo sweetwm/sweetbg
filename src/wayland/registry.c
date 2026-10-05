@@ -93,15 +93,7 @@ static const struct wl_registry_listener registry_listener = {
 
 bool sweetbg_registry_init(
 	struct sweetbg_registry *reg, struct wl_display *display) {
-	reg->registry = NULL;
-	reg->compositor = NULL;
-	reg->shm = NULL;
-	reg->layer_shell = NULL;
-	reg->viewporter = NULL;
-	reg->fractional_scale_manager = NULL;
-	reg->single_pixel_buffer_manager = NULL;
-	reg->xdg_output_manager = NULL;
-	reg->layout_dirty = false;
+	*reg = (struct sweetbg_registry){0};
 	wl_list_init(&reg->outputs);
 
 	reg->registry = wl_display_get_registry(display);

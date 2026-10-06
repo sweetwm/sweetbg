@@ -19,6 +19,26 @@ yay -S sweetbg-bin
 yay -S sweetbg-git
 ```
 
+NixOS:
+
+```sh
+# Try without installing
+nix run github:sweetwm/sweetbg -- --version
+```
+
+```nix
+# flake.nix inputs
+sweetbg.url = "github:sweetwm/sweetbg";
+
+# configuration (pass inputs to your modules via specialArgs)
+nixpkgs.overlays = [ inputs.sweetbg.overlays.default ];
+environment.systemPackages = [ pkgs.sweetbg ];
+
+# systemd user service
+systemd.packages = [ pkgs.sweetbg ];
+systemd.user.services.sweetbgd.wantedBy = [ "graphical-session.target" ];
+```
+
 Build from source:
 
 ```sh

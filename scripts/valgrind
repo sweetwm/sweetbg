@@ -16,9 +16,9 @@ fi
 
 ninja -C build-valgrind
 
-valgrind \
-	--leak-check=full \
-	--show-leak-kinds=definite,possible \
-	--track-origins=yes \
-	--error-exitcode=125 \
-	./build-valgrind/sweetbgd --version
+if meson test -C build-valgrind --list >/dev/null 2>&1; then
+	meson test -C build-valgrind --print-errorlogs \
+		--wrapper='valgrind --leak-check=full --show-leak-kinds=definite,possible --track-origins=yes --error-exitcode=125'
+else
+	printf 'No tests present (tests/ is local-only); skipping.\n'
+fi

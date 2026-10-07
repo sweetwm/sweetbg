@@ -14,11 +14,11 @@ bool sweetbg_layout_slice(const struct sweetbg_layout_output *outputs,
 		return false;
 	}
 
-	int64_t min_x = 0;
-	int64_t min_y = 0;
-	int64_t max_x = 0;
-	int64_t max_y = 0;
-	bool seen = false;
+	// Seed from the target output, already known usable
+	int64_t min_x = outputs[index].x;
+	int64_t min_y = outputs[index].y;
+	int64_t max_x = min_x + outputs[index].w;
+	int64_t max_y = min_y + outputs[index].h;
 
 	for (size_t i = 0; i < count; i++) {
 		const struct sweetbg_layout_output *o = &outputs[i];
@@ -29,14 +29,6 @@ bool sweetbg_layout_slice(const struct sweetbg_layout_output *outputs,
 		int64_t y0 = o->y;
 		int64_t x1 = x0 + o->w;
 		int64_t y1 = y0 + o->h;
-		if (!seen) {
-			min_x = x0;
-			min_y = y0;
-			max_x = x1;
-			max_y = y1;
-			seen = true;
-			continue;
-		}
 		if (x0 < min_x) {
 			min_x = x0;
 		}
@@ -51,14 +43,9 @@ bool sweetbg_layout_slice(const struct sweetbg_layout_output *outputs,
 		}
 	}
 
-	if (!seen) {
-		return false;
-	}
-
 	int64_t span_w = max_x - min_x;
 	int64_t span_h = max_y - min_y;
-	if (span_w <= 0 || span_h <= 0 || span_w > LAYOUT_MAX_EXTENT ||
-		span_h > LAYOUT_MAX_EXTENT) {
+	if (span_w > LAYOUT_MAX_EXTENT || span_h > LAYOUT_MAX_EXTENT) {
 		return false;
 	}
 

@@ -223,11 +223,8 @@ static int send_prepared(const struct sweetbg_output_info *out, uint32_t mode,
 		       : 1;
 }
 
-static bool output_requested(const char *name, const char *output,
-	const char *const *names, size_t name_count) {
-	if (names == NULL) {
-		return output == NULL || strcmp(name, output) == 0;
-	}
+static bool name_in(
+	const char *name, const char *const *names, size_t name_count) {
 	for (size_t i = 0; i < name_count; i++) {
 		if (strcmp(name, names[i]) == 0) {
 			return true;
@@ -236,19 +233,11 @@ static bool output_requested(const char *name, const char *output,
 	return false;
 }
 
-static bool output_skipped(
-	const char *name, const char *const *skip_names, size_t skip_count) {
-	for (size_t i = 0; i < skip_count; i++) {
-		if (strcmp(name, skip_names[i]) == 0) {
-			return true;
-		}
-	}
-	return false;
-}
-
-static int prepare_outputs(const char *path, const char *output,
-	const char *const *names, size_t name_count,
-	const char *const *skip_names, size_t skip_count, uint32_t mode) {
+// names == NULL selects every output; an override always names exactly one
+static int prepare_outputs(const char *path, const char *const *names,
+	size_t name_count, const char *const *skip_names, size_t skip_count,
+	uint32_t mode) {
+	const char *output = mode == SWEETBG_IMG_OVERRIDE ? names[0] : NULL;
 	struct sweetbg_output_info outputs[SWEETBG_MAX_OUTPUTS];
 	uint32_t color;
 	bool color_auto;
@@ -264,10 +253,10 @@ static int prepare_outputs(const char *path, const char *output,
 	bool selected_outputs[SWEETBG_MAX_OUTPUTS] = {false};
 	int selected = 0;
 	for (int i = 0; i < count; i++) {
-		selected_outputs[i] = output_requested(outputs[i].name, output,
-					      names, name_count) &&
-				      !output_skipped(outputs[i].name,
-					      skip_names, skip_count);
+		selected_outputs[i] =
+			(names == NULL ||
+				name_in(outputs[i].name, names, name_count)) &&
+			!name_in(outputs[i].name, skip_names, skip_count);
 		selected += selected_outputs[i];
 	}
 	// A DEFAULT frame also carries the state update. If every current
@@ -365,12 +354,12 @@ int sweetbg_client_set_image(const char *path, const char *output,
 	const char *const *skip_names, size_t skip_count) {
 	uint32_t mode =
 		output == NULL ? SWEETBG_IMG_DEFAULT : SWEETBG_IMG_OVERRIDE;
-	return prepare_outputs(
-		path, output, NULL, 0, skip_names, skip_count, mode);
+	return prepare_outputs(path, output != NULL ? &output : NULL,
+		output != NULL, skip_names, skip_count, mode);
 }
 
 int sweetbg_client_prepare_outputs(
 	const char *path, const char *const *names, size_t name_count) {
 	return prepare_outputs(
-		path, NULL, names, name_count, NULL, 0, SWEETBG_IMG_REPAINT);
+		path, names, name_count, NULL, 0, SWEETBG_IMG_REPAINT);
 }

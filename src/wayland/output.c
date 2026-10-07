@@ -7,21 +7,11 @@
 
 #define OUTPUT_MAX_VERSION 4
 
-static char *dup_string(const char *s) {
-	size_t len = strlen(s) + 1;
-	char *copy = malloc(len);
-	if (copy != NULL) {
-		memcpy(copy, s, len);
-	}
-	return copy;
-}
-
 static void handle_geometry(void *data, struct wl_output *wl_output, int32_t x,
 	int32_t y, int32_t physical_width, int32_t physical_height,
 	int32_t subpixel, const char *make, const char *model,
 	int32_t transform) {
-	struct sweetbg_output *output = data;
-	output->transform = transform;
+	(void)data;
 	(void)wl_output;
 	(void)x;
 	(void)y;
@@ -30,6 +20,7 @@ static void handle_geometry(void *data, struct wl_output *wl_output, int32_t x,
 	(void)subpixel;
 	(void)make;
 	(void)model;
+	(void)transform;
 }
 
 static void handle_mode(void *data, struct wl_output *wl_output, uint32_t flags,
@@ -63,15 +54,14 @@ static void handle_name(
 	struct sweetbg_output *output = data;
 	(void)wl_output;
 	free(output->name);
-	output->name = dup_string(name);
+	output->name = strdup(name);
 }
 
 static void handle_description(
 	void *data, struct wl_output *wl_output, const char *description) {
-	struct sweetbg_output *output = data;
+	(void)data;
 	(void)wl_output;
-	free(output->description);
-	output->description = dup_string(description);
+	(void)description;
 }
 
 static void handle_logical_position(
@@ -189,7 +179,6 @@ static void output_destroy(struct sweetbg_output *output) {
 		}
 	}
 	free(output->name);
-	free(output->description);
 	free(output);
 }
 

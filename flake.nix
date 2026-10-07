@@ -29,6 +29,8 @@
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.sweetbg ];
+          # The -O0 debug gates use -Werror, and fortify warns without -O
+          hardeningDisable = [ "fortify" ];
         };
       });
 

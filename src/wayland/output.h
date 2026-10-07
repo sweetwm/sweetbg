@@ -15,7 +15,6 @@ struct sweetbg_output {
 	struct wl_output *wl_output;
 	uint32_t global_name;
 	int32_t scale;
-	int32_t transform;
 	int32_t pixel_width;
 	int32_t pixel_height;
 	struct zxdg_output_v1 *xdg_output;
@@ -26,7 +25,6 @@ struct sweetbg_output {
 	bool layout_changed;
 	uint32_t generation;
 	char *name;
-	char *description;
 	struct sweetbg_surface surface;
 };
 

@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "ipc/protocol.h"
+
 enum sweetbg_fit {
 	SWEETBG_FIT_COVER,
 	SWEETBG_FIT_CONTAIN,
@@ -23,8 +25,6 @@ bool sweetbg_fit_from_name(const char *name, enum sweetbg_fit *out);
 
 bool sweetbg_config_parse_color(const char *s, uint32_t *out);
 
-#define SWEETBG_CONFIG_MAX_OUTPUTS 16
-
 struct sweetbg_config_output {
 	char name[64];
 	char *image;
@@ -38,7 +38,7 @@ struct sweetbg_config {
 	uint32_t color;
 	bool color_auto;
 	enum sweetbg_fit fit;
-	struct sweetbg_config_output outputs[SWEETBG_CONFIG_MAX_OUTPUTS];
+	struct sweetbg_config_output outputs[SWEETBG_MAX_OVERRIDES];
 	size_t output_count;
 };
 

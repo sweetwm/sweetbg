@@ -12,8 +12,7 @@
 #include "config/config_write.h"
 #include "image/pick.h"
 #include "ipc/client.h"
-
-#define MAX_IMG_OVERRIDES 16
+#include "ipc/protocol.h"
 
 struct img_override {
 	const char *name;
@@ -25,7 +24,7 @@ struct img_args {
 	const char *default_path;
 	const char *flag_output;
 	bool persist;
-	struct img_override overrides[MAX_IMG_OVERRIDES];
+	struct img_override overrides[SWEETBG_MAX_OVERRIDES];
 	int override_count;
 };
 
@@ -105,7 +104,7 @@ static int parse_args(int argc, char **argv, struct img_args *args) {
 
 		struct img_override token;
 		if (is_override_token(a, &token)) {
-			if (args->override_count >= MAX_IMG_OVERRIDES) {
+			if (args->override_count >= SWEETBG_MAX_OVERRIDES) {
 				fprintf(stderr, "sweetbg: too many outputs\n");
 				return 2;
 			}
@@ -161,8 +160,8 @@ int sweetbg_cmd_img(int argc, char **argv) {
 		return 2;
 	}
 
-	char names[MAX_IMG_OVERRIDES][64];
-	const char *skip_names[MAX_IMG_OVERRIDES];
+	char names[SWEETBG_MAX_OVERRIDES][64];
+	const char *skip_names[SWEETBG_MAX_OVERRIDES];
 	if (!copy_override_names(&args, names, skip_names)) {
 		return 2;
 	}

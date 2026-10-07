@@ -34,9 +34,6 @@ struct assignment {
 	struct palette palette;
 };
 
-#define MAX_ASSIGNMENTS 16
-#define MAX_QUERY_OUTPUTS 64
-
 struct daemon {
 	struct wl_display *display;
 	struct sweetbg_registry *reg;
@@ -45,7 +42,7 @@ struct daemon {
 	enum sweetbg_fit fit;
 	char *default_path;
 	struct palette default_palette;
-	struct assignment assignments[MAX_ASSIGNMENTS];
+	struct assignment assignments[SWEETBG_MAX_OVERRIDES];
 	size_t assignment_count;
 };
 
@@ -78,7 +75,7 @@ static struct assignment *ensure_assignment(
 	if (entry != NULL) {
 		return entry;
 	}
-	if (daemon->assignment_count >= MAX_ASSIGNMENTS) {
+	if (daemon->assignment_count >= SWEETBG_MAX_OVERRIDES) {
 		return NULL;
 	}
 	entry = &daemon->assignments[daemon->assignment_count++];
@@ -282,7 +279,7 @@ static void spawn_prepare_set(
 	}
 	char bin[PATH_MAX];
 	client_binary(bin, sizeof(bin));
-	char *args[MAX_QUERY_OUTPUTS + 4] = {
+	char *args[SWEETBG_MAX_OUTPUTS + 4] = {
 		"sweetbg",
 		"prepare-set",
 		NULL,
@@ -376,7 +373,7 @@ static void reconcile_paint(struct daemon *daemon) {
 		const char *name;
 		const char *path;
 	};
-	struct repaint_target targets[MAX_QUERY_OUTPUTS];
+	struct repaint_target targets[SWEETBG_MAX_OUTPUTS];
 	size_t target_count = 0;
 	struct sweetbg_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
@@ -393,10 +390,10 @@ static void reconcile_paint(struct daemon *daemon) {
 				paint_background(daemon, output);
 			}
 			output->surface.needs_repaint = false;
-			// The client sees at most MAX_QUERY_OUTPUTS outputs, so
-			// one past the cap could not be prepared anyway
+			// client sees at most SWEETBG_MAX_OUTPUTS outputs,
+			// so one past the cap could not be prepared anyway
 			if (output->name == NULL ||
-				target_count >= MAX_QUERY_OUTPUTS) {
+				target_count >= SWEETBG_MAX_OUTPUTS) {
 				continue;
 			}
 			targets[target_count++] =
@@ -404,12 +401,12 @@ static void reconcile_paint(struct daemon *daemon) {
 		}
 	}
 
-	bool grouped[MAX_QUERY_OUTPUTS] = {false};
+	bool grouped[SWEETBG_MAX_OUTPUTS] = {false};
 	for (size_t i = 0; i < target_count; i++) {
 		if (grouped[i]) {
 			continue;
 		}
-		const char *names[MAX_QUERY_OUTPUTS];
+		const char *names[SWEETBG_MAX_OUTPUTS];
 		size_t name_count = 0;
 		for (size_t j = i; j < target_count; j++) {
 			if (!grouped[j] &&
@@ -543,7 +540,7 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	}
 	if (req.mode == SWEETBG_IMG_OVERRIDE &&
 		assignment_for(daemon, req.name) == NULL &&
-		daemon->assignment_count >= MAX_ASSIGNMENTS) {
+		daemon->assignment_count >= SWEETBG_MAX_OVERRIDES) {
 		snprintf(message, message_size, "too many output overrides");
 		free(req.path);
 		return SWEETBG_STATUS_ERR_BAD_REQUEST;
@@ -657,12 +654,12 @@ static uint8_t handle_query(
 
 static uint8_t handle_query_json(
 	struct daemon *daemon, char *message, size_t message_size) {
-	struct sweetbg_query_json_output outputs[MAX_QUERY_OUTPUTS];
+	struct sweetbg_query_json_output outputs[SWEETBG_MAX_OUTPUTS];
 	size_t output_count = 0;
 
 	struct sweetbg_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
-		if (output_count >= MAX_QUERY_OUTPUTS) {
+		if (output_count >= SWEETBG_MAX_OUTPUTS) {
 			snprintf(message, message_size, "too many outputs");
 			return SWEETBG_STATUS_ERR_BAD_REQUEST;
 		}

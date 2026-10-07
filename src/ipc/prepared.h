@@ -5,8 +5,7 @@
 
 #include "image/image.h"
 #include "image/layout.h"
-
-#define SWEETBG_MAX_OUTPUTS 64
+#include "ipc/protocol.h"
 
 struct sweetbg_output_info {
 	char name[64];

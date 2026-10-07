@@ -12,6 +12,12 @@
 // Dominant colours a prepared image carries and the daemon reports per output
 #define SWEETBG_MAX_PALETTE 6
 
+// Outputs one query reports and one client prepares; both ends must agree
+#define SWEETBG_MAX_OUTPUTS 64
+
+// Per-output overrides, from config [output.*] or img name=path
+#define SWEETBG_MAX_OVERRIDES 16
+
 // SWEETBG_SET_COLOR value meaning "derive from the image", outside the 24-bit
 // RGB range so it can never collide with a real #rrggbb
 #define SWEETBG_COLOR_AUTO 0x01000000u

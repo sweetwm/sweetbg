@@ -225,7 +225,7 @@ static struct sweetbg_config_output *parse_section(struct sweetbg_config *cfg,
 			return &cfg->outputs[i];
 		}
 	}
-	if (cfg->output_count >= SWEETBG_CONFIG_MAX_OUTPUTS) {
+	if (cfg->output_count >= SWEETBG_MAX_OVERRIDES) {
 		snprintf(err, err_size, "%s:%d: too many [output] sections",
 			name, lineno);
 		return NULL;

@@ -223,6 +223,25 @@ static int send_prepared(const struct sweetbg_output_info *out, uint32_t mode,
 		       : 1;
 }
 
+struct prepared_buffer {
+	uint32_t width;
+	uint32_t height;
+	enum sweetbg_fit fit;
+	int fd;
+};
+
+// span buffers are never stored, span output never matches
+static int prepared_buffer_find(const struct prepared_buffer *buffers,
+	size_t count, uint32_t width, uint32_t height, enum sweetbg_fit fit) {
+	for (size_t i = 0; i < count; i++) {
+		if (buffers[i].width == width && buffers[i].height == height &&
+			buffers[i].fit == fit) {
+			return buffers[i].fd;
+		}
+	}
+	return -1;
+}
+
 static bool name_in(
 	const char *name, const char *const *names, size_t name_count) {
 	for (size_t i = 0; i < name_count; i++) {
@@ -301,7 +320,7 @@ static int prepare_outputs(const char *path, const char *const *names,
 	// already computed, so this costs nothing extra
 	uint32_t fill = color_auto && color_count > 0 ? colors[0] : color;
 
-	struct sweetbg_prepared_buffer buffers[SWEETBG_MAX_OUTPUTS];
+	struct prepared_buffer buffers[SWEETBG_MAX_OUTPUTS];
 	size_t buffer_count = 0;
 	int rc = 0;
 	int applied = 0;
@@ -309,7 +328,7 @@ static int prepare_outputs(const char *path, const char *const *names,
 		if (!selected_outputs[i]) {
 			continue;
 		}
-		int memfd = sweetbg_prepared_buffer_find(buffers, buffer_count,
+		int memfd = prepared_buffer_find(buffers, buffer_count,
 			outputs[i].width, outputs[i].height, outputs[i].fit);
 		bool reusable = memfd >= 0;
 		if (!reusable) {
@@ -323,10 +342,9 @@ static int prepare_outputs(const char *path, const char *const *names,
 			continue;
 		}
 		if (!reusable && outputs[i].fit != SWEETBG_FIT_SPAN) {
-			buffers[buffer_count++] =
-				(struct sweetbg_prepared_buffer){
-					outputs[i].width, outputs[i].height,
-					outputs[i].fit, memfd};
+			buffers[buffer_count++] = (struct prepared_buffer){
+				outputs[i].width, outputs[i].height,
+				outputs[i].fit, memfd};
 		}
 		if (send_prepared(&outputs[i], mode, path, memfd, colors,
 			    color_count) != 0) {

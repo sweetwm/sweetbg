@@ -5,7 +5,6 @@
 
 #include "image/image.h"
 #include "image/layout.h"
-#include "ipc/protocol.h"
 
 struct sweetbg_output_info {
 	char name[64];
@@ -17,22 +16,12 @@ struct sweetbg_output_info {
 	struct sweetbg_layout_output logical;
 };
 
-struct sweetbg_prepared_buffer {
-	uint32_t width;
-	uint32_t height;
-	enum sweetbg_fit fit;
-	int fd;
-};
-
 bool sweetbg_prepared_buffer_size(
 	uint32_t width, uint32_t height, size_t *size_out);
 
 int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
 	enum sweetbg_fit fit, uint32_t width, uint32_t height, uint32_t color,
 	const struct sweetbg_placement *placement);
-
-int sweetbg_prepared_buffer_find(const struct sweetbg_prepared_buffer *buffers,
-	size_t count, uint32_t width, uint32_t height, enum sweetbg_fit fit);
 
 int sweetbg_prepared_buffer_for_output(const struct sweetbg_image *image,
 	const struct sweetbg_output_info *outputs, int output_count, int index,

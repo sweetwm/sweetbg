@@ -64,6 +64,17 @@ bool sweetbg_surface_create(struct sweetbg_surface *surface,
 		return false;
 	}
 
+	// wallpaper must leave desktop clicks and wheel gestures to the
+	// compositor
+	struct wl_region *input_region =
+		wl_compositor_create_region(compositor);
+	if (input_region == NULL) {
+		sweetbg_surface_destroy(surface);
+		return false;
+	}
+	wl_surface_set_input_region(surface->wl_surface, input_region);
+	wl_region_destroy(input_region);
+
 	if (viewporter != NULL) {
 		surface->viewport = wp_viewporter_get_viewport(
 			viewporter, surface->wl_surface);

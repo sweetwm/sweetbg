@@ -1,7 +1,7 @@
 project(
 	'sweetbg',
 	'c',
-	version: '0.4.1',
+	version: '0.4.2',
 	meson_version: '>= 0.60.0',
 	default_options: [
 		'c_std=c11',

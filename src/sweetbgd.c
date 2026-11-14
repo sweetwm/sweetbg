@@ -119,7 +119,8 @@ static void compact_assignments(struct daemon *daemon) {
 	size_t out = 0;
 	for (size_t i = 0; i < daemon->assignment_count; i++) {
 		if (daemon->assignments[i].path == NULL &&
-			!daemon->assignments[i].has_fit) {
+			!daemon->assignments[i].has_fit &&
+			!daemon->assignments[i].has_blur) {
 			continue;
 		}
 		if (out != i) {
@@ -202,6 +203,14 @@ enum sweetbg_fit sweetbg_daemon_fit(
 		assignment_for(daemon, output->name);
 	return assigned != NULL && assigned->has_fit ? assigned->fit
 						     : daemon->fit;
+}
+
+uint32_t sweetbg_daemon_blur(
+	struct daemon *daemon, const struct sweetbg_output *output) {
+	const struct assignment *assigned =
+		assignment_for(daemon, output->name);
+	return assigned != NULL && assigned->has_blur ? assigned->blur
+						      : daemon->blur;
 }
 
 static const struct palette *effective_palette(
@@ -396,6 +405,7 @@ struct prepared_request {
 	uint32_t colors[SWEETBG_MAX_PALETTE];
 	uint8_t color_count;
 	uint32_t generation;
+	uint32_t blur;
 };
 
 static bool parse_prepared(
@@ -434,10 +444,10 @@ static bool parse_prepared(
 	req->path[path_len] = '\0';
 	off += path_len;
 
-	// colour count, colours, generation, nothing may follow
+	// Colour count, colours, generation and blur; older clients fail closed
 	uint32_t n = off + 4 <= len ? sweetbg_get_u32(p + off) : UINT32_MAX;
 	off += 4;
-	if (n > SWEETBG_MAX_PALETTE || off + (size_t)n * 4 + 4 != len) {
+	if (n > SWEETBG_MAX_PALETTE || off + (size_t)n * 4 + 8 != len) {
 		free(req->path);
 		req->path = NULL;
 		return false;
@@ -448,6 +458,7 @@ static bool parse_prepared(
 	}
 	req->color_count = (uint8_t)n;
 	req->generation = sweetbg_get_u32(p + off);
+	req->blur = sweetbg_get_u32(p + off + 4);
 	return true;
 }
 
@@ -496,6 +507,14 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 		return SWEETBG_STATUS_ERR_IMAGE;
 	}
 
+	if (req.blur != sweetbg_daemon_blur(daemon, match)) {
+		snprintf(message, message_size,
+			"blur changed during preparation; retry the image");
+		free(req.path);
+		return req.mode == SWEETBG_IMG_REPAINT
+			       ? SWEETBG_STATUS_OK
+			       : SWEETBG_STATUS_ERR_IMAGE;
+	}
 	bool stale_generation = req.generation != match->generation;
 	if (req.mode == SWEETBG_IMG_REPAINT &&
 		(stale_generation ||
@@ -591,8 +610,8 @@ static uint8_t handle_query(
 		append_line(message, message_size, &off,
 			"default: color #%06x\n", daemon->color & 0xffffffu);
 	}
-	append_line(message, message_size, &off, "fit: %s\n",
-		sweetbg_fit_name(daemon->fit));
+	append_line(message, message_size, &off, "fit: %s\nblur: %u\n",
+		sweetbg_fit_name(daemon->fit), daemon->blur);
 
 	struct sweetbg_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
@@ -608,9 +627,10 @@ static uint8_t handle_query(
 				    : assigned->path[0] == '\0' ? "blank"
 								: "override: ";
 		append_line(message, message_size, &off,
-			"%s: %dx%d scale %d%s%s%s%s%s%s%s\n", name,
+			"%s: %dx%d scale %d blur %u%s%s%s%s%s%s%s\n", name,
 			output->pixel_width, output->pixel_height,
-			output->scale, tagged ? " (" : "", image,
+			output->scale, sweetbg_daemon_blur(daemon, output),
+			tagged ? " (" : "", image,
 			has_image ? assigned->path : "",
 			has_image && has_fit ? ", " : "",
 			has_fit ? "fit: " : "",
@@ -659,6 +679,8 @@ static uint8_t handle_query_json(
 			.fit = sweetbg_fit_name(
 				sweetbg_daemon_fit(daemon, output)),
 			.fit_override = has_fit,
+			.blur = sweetbg_daemon_blur(daemon, output),
+			.blur_override = assigned != NULL && assigned->has_blur,
 			.colors = pal->colors,
 			.color_count = pal->count,
 		};
@@ -669,6 +691,7 @@ static uint8_t handle_query_json(
 		.color = daemon->color,
 		.color_auto = daemon->color_auto,
 		.default_fit = sweetbg_fit_name(daemon->fit),
+		.default_blur = daemon->blur,
 		.default_colors = daemon->default_palette.colors,
 		.default_color_count = daemon->default_palette.count,
 		.outputs = outputs,
@@ -699,11 +722,17 @@ static uint8_t handle_query_outputs(
 		sweetbg_surface_buffer_size(
 			&output->surface, output->scale, &pw, &ph);
 		append_line(message, message_size, &off,
-			"%s %u %u %u %u %d %d %u %u %u\n", output->name, pw, ph,
-			scale, (unsigned)sweetbg_daemon_fit(daemon, output),
+			"%s %u %u %u %u %d %d %u %u %u %u %u\n", output->name,
+			pw, ph, scale,
+			(unsigned)sweetbg_daemon_fit(daemon, output),
 			output->logical_x, output->logical_y,
 			output->logical_width, output->logical_height,
-			output->generation);
+			output->generation, sweetbg_daemon_blur(daemon, output),
+			output->surface.width);
+	}
+	if (off >= message_size) {
+		snprintf(message, message_size, "output response too large");
+		return SWEETBG_STATUS_ERR_BAD_REQUEST;
 	}
 	if (off > 0 && off <= message_size && message[off - 1] == '\n') {
 		message[off - 1] = '\0';
@@ -767,6 +796,60 @@ static void repaint_output_after_fit(struct daemon *daemon,
 	sweetbg_daemon_repaint(daemon);
 }
 
+static bool clear_blur_assignments(struct daemon *daemon, const char *name) {
+	bool changed = false;
+	for (size_t i = 0; i < daemon->assignment_count; i++) {
+		struct assignment *entry = &daemon->assignments[i];
+		if (entry->has_blur &&
+			(name == NULL || strcmp(entry->name, name) == 0)) {
+			entry->has_blur = false;
+			changed = true;
+		}
+	}
+	compact_assignments(daemon);
+	return changed;
+}
+
+static uint8_t set_blur(struct daemon *daemon, uint32_t value, const char *name,
+	char *message, size_t message_size) {
+	if (value > SWEETBG_MAX_BLUR) {
+		snprintf(message, message_size, "blur must be from 0 to 100");
+		return SWEETBG_STATUS_ERR_BAD_REQUEST;
+	}
+	if (name[0] != '\0') {
+		struct sweetbg_output *output = find_output(daemon, name);
+		if (output == NULL) {
+			snprintf(message, message_size, "no output named %s",
+				name);
+			return SWEETBG_STATUS_ERR_BAD_REQUEST;
+		}
+		uint32_t old = sweetbg_daemon_blur(daemon, output);
+		struct assignment *entry = ensure_assignment(daemon, name);
+		if (entry == NULL) {
+			snprintf(message, message_size,
+				"too many output overrides");
+			return SWEETBG_STATUS_ERR_BAD_REQUEST;
+		}
+		entry->blur = value;
+		entry->has_blur = true;
+		if (old != value) {
+			output->generation++;
+			output->surface.needs_repaint = true;
+		}
+	} else {
+		bool changed = value != daemon->blur;
+		bool cleared = clear_blur_assignments(daemon, NULL);
+		daemon->blur = value;
+		if (changed || cleared) {
+			repaint_after_change(daemon, false, true);
+		}
+	}
+	sweetbg_daemon_repaint(daemon);
+	snprintf(message, message_size, "blur %u%s%s", value,
+		name[0] != '\0' ? " for " : "", name);
+	return SWEETBG_STATUS_OK;
+}
+
 struct set_request {
 	uint32_t field;
 	uint32_t value;
@@ -802,6 +885,10 @@ static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 		return SWEETBG_STATUS_ERR_BAD_REQUEST;
 	}
 
+	if (req.field == SWEETBG_SET_BLUR) {
+		return set_blur(
+			daemon, req.value, req.output, message, message_size);
+	}
 	if (req.field == SWEETBG_SET_FIT) {
 		if (req.value > SWEETBG_FIT_SPAN) {
 			snprintf(message, message_size, "invalid fit mode");
@@ -940,17 +1027,18 @@ static void clear_message(
 	const struct clear_request *req, char *message, size_t message_size) {
 	const bool image = (req->flags & SWEETBG_CLEAR_IMAGE) != 0;
 	const bool fit = (req->flags & SWEETBG_CLEAR_FIT) != 0;
+	const bool blur = (req->flags & SWEETBG_CLEAR_BLUR) != 0;
 	const bool blank = (req->flags & SWEETBG_CLEAR_BLANK) != 0;
-	if (blank) {
-		snprintf(message, message_size,
-			fit ? "blanked image and cleared fit for %s"
-			    : "blanked image for %s",
-			req->output);
-		return;
-	}
 	const char *what = image && fit ? "image and fit"
 			   : image	? "image"
-					: "fit";
+			   : fit	? "fit"
+					: "";
+	char target[64];
+	snprintf(target, sizeof(target), "%s%s%s%s%s", what,
+		blur && what[0] != '\0' ? " and " : "", blur ? "blur" : "",
+		blank && (what[0] != '\0' || blur) ? " and " : "",
+		blank ? "blank image" : "");
+	what = target;
 	if (req->output[0] != '\0') {
 		snprintf(message, message_size, "cleared %s for %s", what,
 			req->output);
@@ -966,8 +1054,8 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 		snprintf(message, message_size, "invalid clear request");
 		return SWEETBG_STATUS_ERR_BAD_REQUEST;
 	}
-	uint32_t allowed =
-		SWEETBG_CLEAR_IMAGE | SWEETBG_CLEAR_FIT | SWEETBG_CLEAR_BLANK;
+	uint32_t allowed = SWEETBG_CLEAR_IMAGE | SWEETBG_CLEAR_FIT |
+			   SWEETBG_CLEAR_BLANK | SWEETBG_CLEAR_BLUR;
 	if (req.flags == 0 || (req.flags & ~allowed) != 0) {
 		snprintf(message, message_size, "invalid clear target");
 		return SWEETBG_STATUS_ERR_BAD_REQUEST;
@@ -1013,6 +1101,13 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 				clear_fit_assignment(daemon, req.output) &&
 				old_fit != sweetbg_daemon_fit(daemon, output);
 		}
+		if ((req.flags & SWEETBG_CLEAR_BLUR) != 0) {
+			uint32_t old_blur = sweetbg_daemon_blur(daemon, output);
+			clear_blur_assignments(daemon, req.output);
+			image_changed =
+				image_changed ||
+				old_blur != sweetbg_daemon_blur(daemon, output);
+		}
 		if (image_changed) {
 			output->surface.needs_repaint = true;
 			sweetbg_daemon_repaint(daemon);
@@ -1039,6 +1134,12 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 			daemon->fit = SWEETBG_FIT_COVER;
 		}
 		fit_changed = clear_fit_assignments(daemon) || fit_changed;
+	}
+	if ((req.flags & SWEETBG_CLEAR_BLUR) != 0) {
+		bool changed = daemon->blur != 0;
+		daemon->blur = 0;
+		fit_changed = clear_blur_assignments(daemon, NULL) || changed ||
+			      fit_changed;
 	}
 	if (image_changed) {
 		mark_all_repaint(daemon);
@@ -1235,6 +1336,7 @@ static void apply_loaded_config(
 	daemon->color = cfg->color;
 	daemon->color_auto = cfg->color_auto;
 	daemon->fit = cfg->fit;
+	daemon->blur = cfg->blur;
 	daemon_free_paths(daemon);
 	daemon->default_palette.count = 0;
 
@@ -1255,6 +1357,14 @@ static void apply_loaded_config(
 				fprintf(stderr, "sweetbgd: too many output "
 						"overrides\n");
 				continue;
+			}
+		}
+		if (out->has_blur) {
+			struct assignment *entry =
+				ensure_assignment(daemon, out->name);
+			if (entry != NULL) {
+				entry->blur = out->blur;
+				entry->has_blur = true;
 			}
 		}
 		if (out->has_image) {

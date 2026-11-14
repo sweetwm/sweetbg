@@ -104,9 +104,51 @@ bool sweetbg_config_parse_color(const char *s, uint32_t *out) {
 	return true;
 }
 
+bool sweetbg_config_parse_blur(const char *text, uint32_t *out) {
+	size_t len = strlen(text);
+	if (len == 0 || len > 3 || (len > 1 && text[0] == '0') ||
+		strspn(text, "0123456789") != len) {
+		return false;
+	}
+	unsigned long value = strtoul(text, NULL, 10);
+	if (value > SWEETBG_MAX_BLUR) {
+		return false;
+	}
+	*out = (uint32_t)value;
+	return true;
+}
+
+static bool parse_blur_value(const char *value, uint32_t *out, const char *name,
+	int line, char *err, size_t err_size) {
+	const char *after = value;
+	unsigned digits = 0;
+	uint32_t number = 0;
+	while (*after >= '0' && *after <= '9' && digits < 4) {
+		number = number * 10 + (uint32_t)(*after - '0');
+		after++;
+		digits++;
+	}
+	bool valid = digits > 0 && digits <= 3 && number <= SWEETBG_MAX_BLUR &&
+		     (digits == 1 || value[0] != '0');
+	while (*after == ' ' || *after == '\t') {
+		after++;
+	}
+	if (valid && (*after == '\0' || *after == '#')) {
+		*out = number;
+		return true;
+	}
+	snprintf(err, err_size, "%s:%d: blur must be an integer from 0 to 100",
+		name, line);
+	return false;
+}
+
 static bool apply_pair(struct sweetbg_config *cfg, const char *key,
 	const char *value, const char *name, int line, char *err,
 	size_t err_size) {
+	if (strcmp(key, "blur") == 0) {
+		return parse_blur_value(
+			value, &cfg->blur, name, line, err, err_size);
+	}
 	char text[PATH_MAX];
 	if (!parse_string(value, text, sizeof(text))) {
 		snprintf(err, err_size, "%s:%d: value must be a quoted string",
@@ -154,6 +196,14 @@ static bool apply_pair(struct sweetbg_config *cfg, const char *key,
 static bool apply_output_pair(struct sweetbg_config_output *output,
 	const char *key, const char *value, const char *name, int line,
 	char *err, size_t err_size) {
+	if (strcmp(key, "blur") == 0) {
+		if (!parse_blur_value(
+			    value, &output->blur, name, line, err, err_size)) {
+			return false;
+		}
+		output->has_blur = true;
+		return true;
+	}
 	char text[PATH_MAX];
 	if (!parse_string(value, text, sizeof(text))) {
 		snprintf(err, err_size, "%s:%d: value must be a quoted string",

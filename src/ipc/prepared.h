@@ -11,6 +11,8 @@ struct sweetbg_output_info {
 	uint32_t width;
 	uint32_t height;
 	uint32_t generation;
+	uint32_t blur;
+	uint32_t surface_width;
 	int32_t scale;
 	enum sweetbg_fit fit;
 	struct sweetbg_layout_output logical;

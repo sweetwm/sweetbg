@@ -16,6 +16,8 @@ struct sweetbg_query_json_output {
 	bool blank;
 	const char *fit;
 	bool fit_override;
+	uint32_t blur;
+	bool blur_override;
 	// Dominant colours (0x00RRGGBB) of the image this output shows
 	const uint32_t *colors;
 	size_t color_count;
@@ -26,6 +28,7 @@ struct sweetbg_query_json_state {
 	uint32_t color;
 	bool color_auto;
 	const char *default_fit;
+	uint32_t default_blur;
 	const uint32_t *default_colors;
 	size_t default_color_count;
 	const struct sweetbg_query_json_output *outputs;

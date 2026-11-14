@@ -160,19 +160,21 @@ static int query_outputs(struct sweetbg_output_info *list, int max,
 			*color_auto = auto_flag != 0;
 			continue;
 		}
-		// name, buffer w h, scale, fit, logical x y w h, generation
+		// Geometry, generation, blur and surface width for logical blur
+		// scaling
 		struct sweetbg_output_info *out = &list[count];
 		unsigned fit;
 		// NOLINTNEXTLINE(bugprone-unchecked-string-to-number-conversion)
 		if (sscanf(line,
 			    "%63s %" SCNu32 " %" SCNu32 " %" SCNd32
 			    " %u %" SCNd32 " %" SCNd32 " %" SCNu32 " %" SCNu32
-			    " %" SCNu32,
+			    " %" SCNu32 " %" SCNu32 " %" SCNu32,
 			    out->name, &out->width, &out->height, &out->scale,
 			    &fit, &out->logical.x, &out->logical.y,
-			    &out->logical.w, &out->logical.h,
-			    &out->generation) != 10 ||
-			fit > SWEETBG_FIT_SPAN) {
+			    &out->logical.w, &out->logical.h, &out->generation,
+			    &out->blur, &out->surface_width) != 12 ||
+			out->blur > SWEETBG_MAX_BLUR ||
+			out->surface_width == 0 || fit > SWEETBG_FIT_SPAN) {
 			continue;
 		}
 		out->fit = (enum sweetbg_fit)fit;
@@ -186,7 +188,7 @@ static int send_prepared(const struct sweetbg_output_info *out, uint32_t mode,
 	size_t color_count) {
 	size_t name_len = strlen(out->name);
 	size_t path_len = strlen(path);
-	size_t total = 20 + name_len + 4 + path_len + 4 + color_count * 4 + 4;
+	size_t total = 20 + name_len + 4 + path_len + 4 + color_count * 4 + 8;
 	if (total > SWEETBG_IPC_MAX_PAYLOAD) {
 		fprintf(stderr, "sweetbg: image request too long\n");
 		return 1;
@@ -213,7 +215,8 @@ static int send_prepared(const struct sweetbg_output_info *out, uint32_t mode,
 		off += 4;
 	}
 	sweetbg_put_u32(payload + off, out->generation);
-	off += 4;
+	sweetbg_put_u32(payload + off + 4, out->blur);
+	off += 8;
 
 	uint8_t resp[SWEETBG_IPC_MAX_PAYLOAD];
 	uint32_t len;
@@ -227,15 +230,21 @@ struct prepared_buffer {
 	uint32_t width;
 	uint32_t height;
 	enum sweetbg_fit fit;
+	uint32_t blur;
+	uint32_t surface_width;
 	int fd;
 };
 
 // span buffers are never stored, span output never matches
 static int prepared_buffer_find(const struct prepared_buffer *buffers,
-	size_t count, uint32_t width, uint32_t height, enum sweetbg_fit fit) {
+	size_t count, const struct sweetbg_output_info *output) {
 	for (size_t i = 0; i < count; i++) {
-		if (buffers[i].width == width && buffers[i].height == height &&
-			buffers[i].fit == fit) {
+		if (buffers[i].width == output->width &&
+			buffers[i].height == output->height &&
+			buffers[i].fit == output->fit &&
+			buffers[i].blur == output->blur &&
+			(output->blur == 0 || buffers[i].surface_width ==
+						      output->surface_width)) {
 			return buffers[i].fd;
 		}
 	}
@@ -257,7 +266,7 @@ static int prepare_outputs(const char *path, const char *const *names,
 	size_t name_count, const char *const *skip_names, size_t skip_count,
 	uint32_t mode) {
 	const char *output = mode == SWEETBG_IMG_OVERRIDE ? names[0] : NULL;
-	struct sweetbg_output_info outputs[SWEETBG_MAX_OUTPUTS];
+	struct sweetbg_output_info outputs[SWEETBG_MAX_OUTPUTS] = {0};
 	uint32_t color;
 	bool color_auto;
 	int count = query_outputs(
@@ -328,8 +337,8 @@ static int prepare_outputs(const char *path, const char *const *names,
 		if (!selected_outputs[i]) {
 			continue;
 		}
-		int memfd = prepared_buffer_find(buffers, buffer_count,
-			outputs[i].width, outputs[i].height, outputs[i].fit);
+		int memfd = prepared_buffer_find(
+			buffers, buffer_count, &outputs[i]);
 		bool reusable = memfd >= 0;
 		if (!reusable) {
 			memfd = sweetbg_prepared_buffer_for_output(
@@ -344,7 +353,8 @@ static int prepare_outputs(const char *path, const char *const *names,
 		if (!reusable && outputs[i].fit != SWEETBG_FIT_SPAN) {
 			buffers[buffer_count++] = (struct prepared_buffer){
 				outputs[i].width, outputs[i].height,
-				outputs[i].fit, memfd};
+				outputs[i].fit, outputs[i].blur,
+				outputs[i].surface_width, memfd};
 		}
 		if (send_prepared(&outputs[i], mode, path, memfd, colors,
 			    color_count) != 0) {

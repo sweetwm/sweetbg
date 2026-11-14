@@ -64,4 +64,4 @@ _$XDG_RUNTIME_DIR/sweetbg.sock_
 
 Native subscribers can follow wallpaper changes through the runtime socket.
 A renderer may claim a prepared cover output; Sweetbg restores its wallpaper
-when the renderer releases it or disconnects. Other fit modes stay with Sweetbg.
+when the renderer releases it or disconnects. Other fit modes and blur-enabled outputs stay with Sweetbg.

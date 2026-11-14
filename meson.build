@@ -22,6 +22,7 @@ wayland_client = dependency('wayland-client')
 wayland_protos = dependency('wayland-protocols')
 libpng = dependency('libpng')
 libjpeg = dependency('libjpeg')
+libm = meson.get_compiler('c').find_library('m')
 libwebp = dependency('libwebp')
 
 # jpeg.c decodes straight into JCS_EXT_BGRX, a libjpeg-turbo extension
@@ -60,6 +61,8 @@ executable(
 	'src/ipc/client.c',
 	'src/ipc/prepared.c',
 	'src/image/image.c',
+	'src/image/blur.c',
+	'src/image/blur_passes.c',
 	'src/image/fit.c',
 	'src/image/layout.c',
 	'src/image/pick.c',
@@ -71,7 +74,7 @@ executable(
 	'src/config/config_write.c',
 	include_directories: sweetbg_inc,
 	link_with: ipc_proto,
-	dependencies: [libpng, libjpeg, libwebp],
+	dependencies: [libpng, libjpeg, libwebp, libm],
 	install: true,
 )
 

@@ -36,6 +36,7 @@ enum sweetbg_ipc_command {
 enum sweetbg_set_field {
 	SWEETBG_SET_FIT = 1,
 	SWEETBG_SET_COLOR = 2,
+	SWEETBG_SET_BLUR = 3,
 };
 
 enum sweetbg_ipc_status {
@@ -55,6 +56,7 @@ enum sweetbg_clear_flags {
 	SWEETBG_CLEAR_IMAGE = 1u << 0,
 	SWEETBG_CLEAR_FIT = 1u << 1,
 	SWEETBG_CLEAR_BLANK = 1u << 2,
+	SWEETBG_CLEAR_BLUR = 1u << 3,
 };
 
 void sweetbg_put_u32(uint8_t *p, uint32_t value);

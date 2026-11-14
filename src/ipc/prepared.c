@@ -5,6 +5,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "image/blur.h"
 #include "ipc/protocol.h"
 
 #define MAX_PREPARE_DIMENSION 32768u
@@ -25,9 +26,9 @@ bool sweetbg_prepared_buffer_size(
 	return true;
 }
 
-int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
+static int buffer_create(const struct sweetbg_image *image,
 	enum sweetbg_fit fit, uint32_t width, uint32_t height, uint32_t color,
-	const struct sweetbg_placement *placement) {
+	const struct sweetbg_placement *placement, double sigma) {
 	size_t size;
 	if (!sweetbg_prepared_buffer_size(width, height, &size)) {
 		return -1;
@@ -52,6 +53,9 @@ int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
 					      placement, width, height, data)
 				    : sweetbg_image_render(image, fit, width,
 					      height, color, data);
+	if (ok && sigma > 0) {
+		ok = sweetbg_blur(data, width, height, sigma);
+	}
 	if (munmap(data, size) != 0 || !ok) {
 		close(fd);
 		return -1;
@@ -62,6 +66,12 @@ int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
 		return -1;
 	}
 	return fd;
+}
+
+int sweetbg_prepared_buffer_create(const struct sweetbg_image *image,
+	enum sweetbg_fit fit, uint32_t width, uint32_t height, uint32_t color,
+	const struct sweetbg_placement *placement) {
+	return buffer_create(image, fit, width, height, color, placement, 0);
 }
 
 static bool span_layout(const struct sweetbg_output_info *outputs, int count,
@@ -98,6 +108,13 @@ static bool span_placement(const struct sweetbg_image *image,
 int sweetbg_prepared_buffer_for_output(const struct sweetbg_image *image,
 	const struct sweetbg_output_info *outputs, int output_count, int index,
 	uint32_t color) {
+	if (output_count < 1 || output_count > SWEETBG_MAX_OUTPUTS ||
+		index < 0 || index >= output_count ||
+		outputs[index].blur > SWEETBG_MAX_BLUR ||
+		(outputs[index].blur > 0 &&
+			outputs[index].surface_width == 0)) {
+		return -1;
+	}
 	struct sweetbg_placement place;
 	const struct sweetbg_placement *placement = NULL;
 	enum sweetbg_fit fit = outputs[index].fit;
@@ -107,8 +124,13 @@ int sweetbg_prepared_buffer_for_output(const struct sweetbg_image *image,
 	} else if (fit == SWEETBG_FIT_SPAN) {
 		fit = SWEETBG_FIT_COVER;
 	}
-	return sweetbg_prepared_buffer_create(image, fit, outputs[index].width,
-		outputs[index].height, color, placement);
+	double sigma = outputs[index].blur == 0
+			       ? 0
+			       : (double)outputs[index].blur *
+					 outputs[index].width /
+					 outputs[index].surface_width;
+	return buffer_create(image, fit, outputs[index].width,
+		outputs[index].height, color, placement, sigma);
 }
 
 void sweetbg_prepared_decode_target(struct sweetbg_decode_target *target,

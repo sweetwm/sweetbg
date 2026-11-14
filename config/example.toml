@@ -18,12 +18,17 @@ color = "#1e1e2e"
 #   span    - stretch one image across every output, each showing its slice
 fit = "cover"
 
+# Blur sigma in logical pixels: integer 0..100, default 0 (disabled).
+# Applied once to the fitted wallpaper, including background margins.
+blur = 0
+
 # Per-output sections override defaults for a single output.
 # The name is what `sweetbg query` reports (e.g. DP-1, HDMI-A-1).
 # "span" is not valid here: it is defined across the whole layout.
 # [output.DP-1]
 # image = "/home/me/Pictures/left.jpg"
 # fit = "contain"
+# blur = 24
 #
 # [output.HDMI-A-1]
 # image = "/home/me/Pictures/tv.png"

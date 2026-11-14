@@ -39,19 +39,26 @@ sweetbg - control the sweetbg wallpaper daemon
 	Set the background color. It is visible when no image is set and behind
 	_contain_ or _center_ images. _auto_ uses a dominant color from each image.
 
-	Use *--persist* with either *set* command to save the change.
+*set blur* <0..100> [*--output* <name>]
+	Set blur sigma in logical pixels. The default is 0 (disabled). Setting the
+	default clears runtime per-output blur overrides. Preparation takes extra
+	time and temporary memory; the displayed wallpaper remains static.
 
-*clear* [*--image*] [*--fit*] [*--output* <name>] [*--blank*]
+	Use *--persist* with any *set* command to save the change.
+
+*clear* [*--image*] [*--fit*] [*--blur*] [*--output* <name>] [*--blank*]
 	Clear runtime wallpaper state. With no options, clear all images and show
 	the background color.
 
 	*--output* limits the change to one output. Add *--blank* to keep that
 	output blank even when a default image is set. *--fit* clears fit settings;
 	without *--output*, the default returns to _cover_. *--image* and *--fit*
-	may be used together. *--persist* also removes the matching saved settings.
+	may be used together. *--blur* restores the output's default blur, or resets
+	all blur to 0 without *--output*. *--persist* also removes the matching saved
+	settings.
 
 *query*
-	Show the default wallpaper, fit mode, and connected outputs.
+	Show the default wallpaper, fit, blur, and connected outputs.
 
 *query* *--json*
 	Show the same state as JSON, including dominant image colors.

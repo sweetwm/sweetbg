@@ -102,7 +102,10 @@ static void emit_kv(FILE *ms, const char *key, const char *value,
 		*at_start = true;
 	}
 	char line[PATH_MAX + 64];
-	int n = snprintf(line, sizeof(line), "%s = \"%s\"\n", key, value);
+	int n = strcmp(key, "blur") == 0
+			? snprintf(line, sizeof(line), "%s = %s\n", key, value)
+			: snprintf(line, sizeof(line), "%s = \"%s\"\n", key,
+				  value);
 	if (n > 0) {
 		emit(ms, line, (size_t)n, at_start, any);
 	}
@@ -189,6 +192,13 @@ static bool patch(const char *input, const char *section, bool all_outputs,
 bool sweetbg_config_patch(const char *input, const char *output_name,
 	const char *key, const char *value, char **out, char *err,
 	size_t err_size) {
+	uint32_t blur;
+	if (value != NULL && strcmp(key, "blur") == 0 &&
+		!sweetbg_config_parse_blur(value, &blur)) {
+		snprintf(
+			err, err_size, "blur must be an integer from 0 to 100");
+		return false;
+	}
 	if (value != NULL && !valid_value(value)) {
 		snprintf(err, err_size,
 			"value is too long or contains quotes/newlines");

@@ -9,6 +9,10 @@
 
 #include "ipc/protocol.h"
 
+#define SWEETBG_MAX_BLUR 100u
+
+bool sweetbg_config_parse_blur(const char *text, uint32_t *out);
+
 enum sweetbg_fit {
 	SWEETBG_FIT_COVER,
 	SWEETBG_FIT_CONTAIN,
@@ -29,8 +33,10 @@ struct sweetbg_config_output {
 	char name[64];
 	char *image;
 	enum sweetbg_fit fit;
+	uint32_t blur;
 	bool has_image;
 	bool has_fit;
+	bool has_blur;
 };
 
 struct sweetbg_config {
@@ -38,6 +44,7 @@ struct sweetbg_config {
 	uint32_t color;
 	bool color_auto;
 	enum sweetbg_fit fit;
+	uint32_t blur;
 	struct sweetbg_config_output outputs[SWEETBG_MAX_OVERRIDES];
 	size_t output_count;
 };

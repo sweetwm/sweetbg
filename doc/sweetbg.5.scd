@@ -13,7 +13,7 @@ file at startup and when *sweetbg reload* is run.
 A missing file uses defaults. Errors include the file and line number. Runtime
 changes are temporary unless *--persist* is used; see *sweetbg*(1).
 
-The file accepts double-quoted string values, _#_ comments, and
+The file accepts double-quoted strings, integers for *blur*, _#_ comments, and
 _[output.NAME]_ sections. Unknown or malformed settings are errors.
 
 # KEYS
@@ -41,9 +41,14 @@ Top-level keys provide defaults for every output.
 	_span_ requires compositor support for xdg-output. It falls back to
 	_cover_ when the output layout is unavailable.
 
+*blur*
+	Blur sigma as an integer from 0 to 100 logical pixels. The default is 0
+	(disabled). Blurs the fitted wallpaper and margins once; span slices are
+	blurred independently. Blur-enabled outputs cannot be claimed by renderers.
+
 # PER-OUTPUT SECTIONS
 
-An _[output.NAME]_ section overrides *image* or *fit* for one output. NAME is
+An _[output.NAME]_ section overrides *image*, *fit*, or *blur* for one output. NAME is
 shown by *sweetbg query*. Outputs without a matching section use the top-level
 settings.
 

@@ -36,7 +36,8 @@ static int cmd_set(int argc, char **argv) {
 	}
 	if (field == NULL || value == NULL) {
 		fprintf(stderr, "usage: sweetbg set fit <mode> | "
-				"color <#rrggbb|auto> [--output <name>] "
+				"color <#rrggbb|auto> | blur <0..100> "
+				"[--output <name>] "
 				"[--persist]\n");
 		return 2;
 	}
@@ -62,6 +63,15 @@ static int cmd_set(int argc, char **argv) {
 		set_field = SWEETBG_SET_FIT;
 		set_value = (uint32_t)fit;
 		persist_value = sweetbg_fit_name(fit);
+	} else if (strcmp(field, "blur") == 0) {
+		if (!sweetbg_config_parse_blur(value, &set_value)) {
+			fprintf(stderr, "sweetbg: blur must be an integer from "
+					"0 to 100\n");
+			return 2;
+		}
+		set_field = SWEETBG_SET_BLUR;
+		snprintf(canon, sizeof(canon), "%u", set_value);
+		persist_value = canon;
 	} else if (strcmp(field, "color") == 0) {
 		if (output != NULL) {
 			fprintf(stderr, "sweetbg: color cannot be scoped to an "
@@ -87,7 +97,8 @@ static int cmd_set(int argc, char **argv) {
 		}
 	} else {
 		fprintf(stderr,
-			"sweetbg: unknown set field '%s' (use fit or color)\n",
+			"sweetbg: unknown set field '%s' (use fit, color, or "
+			"blur)\n",
 			field);
 		return 2;
 	}
@@ -133,6 +144,10 @@ static int persist_clear(uint32_t flags, const char *output) {
 		ok = sweetbg_config_persist(
 			output, "fit", NULL, err, sizeof(err));
 	}
+	if (ok && (flags & SWEETBG_CLEAR_BLUR) != 0) {
+		ok = sweetbg_config_persist(
+			output, "blur", NULL, err, sizeof(err));
+	}
 	if (!ok) {
 		fprintf(stderr,
 			"sweetbg: applied but could not save config: %s\n",
@@ -161,6 +176,8 @@ static int cmd_clear(int argc, char **argv) {
 			flags |= SWEETBG_CLEAR_IMAGE;
 		} else if (strcmp(a, "--fit") == 0) {
 			flags |= SWEETBG_CLEAR_FIT;
+		} else if (strcmp(a, "--blur") == 0) {
+			flags |= SWEETBG_CLEAR_BLUR;
 		} else if (strcmp(a, "--blank") == 0) {
 			flags |= SWEETBG_CLEAR_BLANK;
 		} else {
@@ -233,6 +250,7 @@ static void usage(FILE *out) {
 	      "                             set fit on one output\n"
 	      "  set color <#rrggbb|auto>   set the background color "
 	      "(auto: from image)\n"
+	      "  set blur <0..100>          blur wallpapers (0 disables)\n"
 	      "  clear                      clear images to the background "
 	      "color\n"
 	      "  clear --output <name>      clear one output image override\n"
@@ -252,6 +270,7 @@ static void usage(FILE *out) {
 	      "  -p, --persist        also save the change to the config\n"
 	      "  --image              clear image state (clear only)\n"
 	      "  --fit                clear fit state (clear only)\n"
+	      "  --blur               clear blur state (clear only)\n"
 	      "  --blank              show color on one output (clear only)\n"
 	      "\n"
 	      "options:\n"

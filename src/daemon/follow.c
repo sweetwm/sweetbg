@@ -17,7 +17,9 @@ static bool follow_handoff(
 		}
 		struct sweetbg_surface *surface = &output->surface;
 		if (claim) {
-			if (!surface->configured || surface->viewport == NULL ||
+			if (sweetbg_daemon_blur(daemon, output) != 0 ||
+				!surface->configured ||
+				surface->viewport == NULL ||
 				sweetbg_daemon_fit(daemon, output) !=
 					SWEETBG_FIT_COVER ||
 				sweetbg_daemon_path(daemon, output)[0] ==
@@ -58,7 +60,8 @@ static size_t follow_snapshot(
 		}
 		const char *path = sweetbg_daemon_path(daemon, output);
 		uint32_t fit = (uint32_t)sweetbg_daemon_fit(daemon, output);
-		if (strlen(path) > FOLLOW_PATH_MAX) {
+		if (strlen(path) > FOLLOW_PATH_MAX ||
+			sweetbg_daemon_blur(daemon, output) != 0) {
 			path = "";
 			fit = UINT32_MAX;
 		}
@@ -84,7 +87,8 @@ void sweetbg_daemon_follow_reconcile(
 	struct sweetbg_output *output;
 	wl_list_for_each(output, &daemon->reg->outputs, link) {
 		if (output->surface.renderer != 0 &&
-			(sweetbg_daemon_fit(daemon, output) !=
+			(sweetbg_daemon_blur(daemon, output) != 0 ||
+				sweetbg_daemon_fit(daemon, output) !=
 					SWEETBG_FIT_COVER ||
 				sweetbg_daemon_path(daemon, output)[0] ==
 					'\0' ||

@@ -100,7 +100,7 @@ bool sweetbg_query_json_write(const struct sweetbg_query_json_state *state,
 	json_append(&json, ",\"color\":\"#%06x\",\"colorAuto\":%s,\"fit\":",
 		state->color & 0xffffffu, state->color_auto ? "true" : "false");
 	json_append_string(&json, state->default_fit);
-	json_append(&json, ",\"colors\":");
+	json_append(&json, ",\"blur\":%u,\"colors\":", state->default_blur);
 	json_append_colors(
 		&json, state->default_colors, state->default_color_count);
 	json_append(&json, "},\"outputs\":[");
@@ -127,6 +127,8 @@ bool sweetbg_query_json_write(const struct sweetbg_query_json_state *state,
 		json_append(&json, ",\"fitOverride\":%s,\"colors\":",
 			output->fit_override ? "true" : "false");
 		json_append_colors(&json, output->colors, output->color_count);
+		json_append(&json, ",\"blur\":%u,\"blurOverride\":%s",
+			output->blur, output->blur_override ? "true" : "false");
 		json_append(&json, "}");
 	}
 

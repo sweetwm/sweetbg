@@ -107,6 +107,9 @@ sweetbg set fit cover
 # Change the fit mode for one output only (--output or -o)
 sweetbg set fit contain --output DP-1
 
+# Blur the wallpaper (0 disables; --output and --persist are supported)
+sweetbg set blur 24
+
 # Set the background color (--persist or -p); "auto" derives it from the image
 sweetbg set color "#1e1e2e" --persist
 
@@ -146,6 +149,16 @@ sweetbg set fit span
 sweetbg img ~/Pictures/ultrawide.jpg
 ```
 
+### Blur
+
+Blur is optional and disabled by default. Set its strength from 0 to 100:
+
+```sh
+sweetbg set blur 24 --persist
+sweetbg set blur 0 --output DP-1
+sweetbg clear --blur --output DP-1
+```
+
 ### Theming
 
 `query --json` reports each output's dominant colors, so the current wallpaper
@@ -173,6 +186,7 @@ Example:
 image = "/home/me/Pictures/wallpaper.jpg"
 color = "#1e1e2e"
 fit = "cover"
+blur = 0
 
 [output.DP-1]
 image = "/home/me/Pictures/left.jpg"

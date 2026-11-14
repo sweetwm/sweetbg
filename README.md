@@ -1,8 +1,21 @@
-# Sweetbg
+<h1 align=center>sweetbg</h1>
+
+<div align=center>
+
+![GitHub last commit](https://img.shields.io/github/last-commit/sweetwm/sweetbg?style=for-the-badge&labelColor=181825&color=a6e3a1)
+![GitHub repo size](https://img.shields.io/github/repo-size/sweetwm/sweetbg?style=for-the-badge&labelColor=181825&color=d3bfe6)
+![AUR Version](https://img.shields.io/aur/version/sweetbg-bin?style=for-the-badge&labelColor=181825&color=b4befe)
+![GitHub Repo stars](https://img.shields.io/github/stars/sweetwm/sweetbg?style=for-the-badge&labelColor=181825&color=f9e2af)
+
 
 Sweetbg is a small, lightweight and static Wayland wallpaper daemon
 
-Runs on Linux and FreeBSD with a compositor that supports `wlr-layer-shell`.
+Runs on Linux and FreeBSD with a compositor that supports `wlr-layer-shell`
+
+[< Wiki >](https://sweetwm.org/docs/sweetbg)
+
+
+</div>
 
 <a href="https://github.com/user-attachments/assets/1af9d909-ac15-4d44-8280-b08ac0857bb2" target="_blank">
   <picture>
@@ -11,9 +24,26 @@ Runs on Linux and FreeBSD with a compositor that supports `wlr-layer-shell`.
   </picture>
 </a>
 
+---
+
+## 🔥 Features
+
+- Change wallpapers at runtime from the command line
+- Per-monitor wallpapers, fit modes, and blur settings
+- Cover, contain, center, tile and multi-monitor span modes
+- JPEG, PNG, and WebP support
+- Optional blur, processed once when applying the wallpaper
+- Pick a random wallpaper from a directory
+- Automatic background colors and dominant-color palettes for theming
+- Fractional scaling and monitor hotplug support
+- JSON status output for scripts and built-in setup diagnostics
+- Runs on Linux and FreeBSD
+
 ## Install
 
-Arch Linux AUR packages:
+### Arch Linux
+
+On Arch Linux, install sweetbg from the AUR:
 
 ```sh
 yay -S sweetbg-bin
@@ -21,7 +51,7 @@ yay -S sweetbg-bin
 yay -S sweetbg-git
 ```
 
-NixOS:
+### NixOS
 
 ```sh
 # Try without installing

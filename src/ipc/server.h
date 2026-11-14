@@ -5,7 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct sweetbg_follow;
 struct sweetbg_ipc_server {
+	struct sweetbg_follow *follow;
 	int fd;
 	char path[108];
 };

@@ -19,6 +19,10 @@ struct sweetbg_buffer {
 	struct sweetbg_buffer *next;
 };
 
+bool sweetbg_buffer_validate_fd(int fd, uint32_t width, uint32_t height);
+bool sweetbg_buffer_transparent(
+	struct sweetbg_buffer *buffer, struct wl_shm *shm);
+
 bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 	uint32_t width, uint32_t height);
 

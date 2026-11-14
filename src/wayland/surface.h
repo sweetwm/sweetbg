@@ -22,6 +22,8 @@ struct sweetbg_surface {
 	uint32_t width;
 	uint32_t height;
 	bool configured;
+	// Native rendering is 0; a subscription owns the output as fd + 1
+	int renderer;
 	bool needs_repaint;
 	bool has_content;
 	struct sweetbg_buffer *buffer;
@@ -49,6 +51,9 @@ bool sweetbg_surface_paint_color(struct sweetbg_surface *surface,
 bool sweetbg_surface_attach_prepared(struct sweetbg_surface *surface,
 	struct wl_shm *shm, int32_t scale, int fd, uint32_t width,
 	uint32_t height);
+
+bool sweetbg_surface_transparent(
+	struct sweetbg_surface *surface, struct wl_shm *shm);
 
 void sweetbg_surface_collect(struct sweetbg_surface *surface);
 

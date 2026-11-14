@@ -13,6 +13,9 @@
 #include <wayland-client.h>
 
 #include "config/config.h"
+#include "daemon/follow.h"
+#include "daemon/state.h"
+#include "ipc/follow.h"
 #include "ipc/protocol.h"
 #include "ipc/server.h"
 #include "query/json.h"
@@ -23,31 +26,6 @@
 #include "wayland/surface.h"
 
 extern char **environ;
-
-struct palette {
-	uint32_t colors[SWEETBG_MAX_PALETTE];
-	uint8_t count;
-};
-
-struct assignment {
-	char name[64];
-	char *path;
-	enum sweetbg_fit fit;
-	bool has_fit;
-	struct palette palette;
-};
-
-struct daemon {
-	struct wl_display *display;
-	struct sweetbg_registry *reg;
-	uint32_t color;
-	bool color_auto;
-	enum sweetbg_fit fit;
-	char *default_path;
-	struct palette default_palette;
-	struct assignment assignments[SWEETBG_MAX_OVERRIDES];
-	size_t assignment_count;
-};
 
 static void compact_assignments(struct daemon *daemon);
 static bool load_config(
@@ -208,7 +186,7 @@ static bool ensure_surfaces(struct sweetbg_registry *reg) {
 	return true;
 }
 
-static const char *effective_path(
+const char *sweetbg_daemon_path(
 	struct daemon *daemon, const struct sweetbg_output *output) {
 	const struct assignment *assigned =
 		assignment_for(daemon, output->name);
@@ -218,7 +196,7 @@ static const char *effective_path(
 	return daemon->default_path != NULL ? daemon->default_path : "";
 }
 
-static enum sweetbg_fit effective_fit(
+enum sweetbg_fit sweetbg_daemon_fit(
 	struct daemon *daemon, const struct sweetbg_output *output) {
 	const struct assignment *assigned =
 		assignment_for(daemon, output->name);
@@ -350,7 +328,7 @@ static void paint_background(
 		daemon->color);
 }
 
-static void reconcile_paint(struct daemon *daemon) {
+void sweetbg_daemon_repaint(struct daemon *daemon) {
 	spread_span_repaint(daemon);
 
 	struct repaint_target {
@@ -365,8 +343,13 @@ static void reconcile_paint(struct daemon *daemon) {
 			!output->surface.needs_repaint) {
 			continue;
 		}
+		if (output->surface.renderer != 0) {
+			sweetbg_surface_transparent(
+				&output->surface, daemon->reg->shm);
+			continue;
+		}
 		output->generation++;
-		const char *path = effective_path(daemon, output);
+		const char *path = sweetbg_daemon_path(daemon, output);
 		if (path[0] == '\0') {
 			paint_background(daemon, output);
 		} else {
@@ -516,7 +499,8 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	bool stale_generation = req.generation != match->generation;
 	if (req.mode == SWEETBG_IMG_REPAINT &&
 		(stale_generation ||
-			strcmp(req.path, effective_path(daemon, match)) != 0)) {
+			strcmp(req.path, sweetbg_daemon_path(daemon, match)) !=
+				0)) {
 		snprintf(message, message_size, "superseded prepare for %s",
 			req.name);
 		free(req.path);
@@ -530,8 +514,13 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 		return SWEETBG_STATUS_ERR_BAD_REQUEST;
 	}
 
-	if (!sweetbg_surface_attach_prepared(&match->surface, daemon->reg->shm,
-		    match->scale, fd, req.width, req.height)) {
+	bool accepted =
+		match->surface.renderer != 0
+			? sweetbg_buffer_validate_fd(fd, req.width, req.height)
+			: sweetbg_surface_attach_prepared(&match->surface,
+				  daemon->reg->shm, match->scale, fd, req.width,
+				  req.height);
+	if (!accepted) {
 		snprintf(message, message_size, "could not attach buffer");
 		free(req.path);
 		return SWEETBG_STATUS_ERR_IMAGE;
@@ -560,7 +549,7 @@ static uint8_t handle_img_prepared(struct daemon *daemon,
 	set_effective_palette(daemon, req.name, req.colors, req.color_count);
 	if (req.mode != SWEETBG_IMG_REPAINT && stale_generation) {
 		match->surface.needs_repaint = true;
-		reconcile_paint(daemon);
+		sweetbg_daemon_repaint(daemon);
 	}
 	snprintf(message, message_size, "applied %s to %s", applied_path,
 		req.name);
@@ -655,7 +644,7 @@ static uint8_t handle_query_json(
 		const bool has_fit = assigned != NULL && assigned->has_fit;
 		const bool blank = has_image && assigned->path[0] == '\0';
 		const char *path =
-			blank ? NULL : effective_path(daemon, output);
+			blank ? NULL : sweetbg_daemon_path(daemon, output);
 		const struct palette *pal = effective_palette(daemon, output);
 
 		outputs[output_count++] = (struct sweetbg_query_json_output){
@@ -667,7 +656,8 @@ static uint8_t handle_query_json(
 			.image = path,
 			.image_override = has_image,
 			.blank = blank,
-			.fit = sweetbg_fit_name(effective_fit(daemon, output)),
+			.fit = sweetbg_fit_name(
+				sweetbg_daemon_fit(daemon, output)),
 			.fit_override = has_fit,
 			.colors = pal->colors,
 			.color_count = pal->count,
@@ -710,7 +700,7 @@ static uint8_t handle_query_outputs(
 			&output->surface, output->scale, &pw, &ph);
 		append_line(message, message_size, &off,
 			"%s %u %u %u %u %d %d %u %u %u\n", output->name, pw, ph,
-			scale, (unsigned)effective_fit(daemon, output),
+			scale, (unsigned)sweetbg_daemon_fit(daemon, output),
 			output->logical_x, output->logical_y,
 			output->logical_width, output->logical_height,
 			output->generation);
@@ -732,11 +722,12 @@ static void repaint_after_change(
 		if (!output->surface.configured) {
 			continue;
 		}
-		bool is_placeholder = effective_path(daemon, output)[0] == '\0';
+		bool is_placeholder =
+			sweetbg_daemon_path(daemon, output)[0] == '\0';
 		bool image_needs =
 			fit_changed ||
-			(color_changed &&
-				fit_uses_color(effective_fit(daemon, output)));
+			(color_changed && fit_uses_color(sweetbg_daemon_fit(
+						  daemon, output)));
 		if (is_placeholder ? color_changed : image_needs) {
 			output->surface.needs_repaint = true;
 		} else if (is_placeholder && fit_changed) {
@@ -745,7 +736,7 @@ static void repaint_after_change(
 			output->generation++;
 		}
 	}
-	reconcile_paint(daemon);
+	sweetbg_daemon_repaint(daemon);
 }
 
 static struct sweetbg_output *find_output(
@@ -764,16 +755,16 @@ static void repaint_output_after_fit(struct daemon *daemon,
 	if (!output->surface.configured) {
 		return;
 	}
-	if (old_fit == effective_fit(daemon, output)) {
+	if (old_fit == sweetbg_daemon_fit(daemon, output)) {
 		return;
 	}
-	if (effective_path(daemon, output)[0] == '\0') {
+	if (sweetbg_daemon_path(daemon, output)[0] == '\0') {
 		// Invalidate a first image prepared with the previous fit
 		output->generation++;
 		return;
 	}
 	output->surface.needs_repaint = true;
-	reconcile_paint(daemon);
+	sweetbg_daemon_repaint(daemon);
 }
 
 struct set_request {
@@ -832,7 +823,7 @@ static uint8_t handle_set(struct daemon *daemon, const uint8_t *payload,
 				return SWEETBG_STATUS_ERR_BAD_REQUEST;
 			}
 			enum sweetbg_fit old_fit =
-				effective_fit(daemon, output);
+				sweetbg_daemon_fit(daemon, output);
 			if (!set_fit_assignment(daemon, req.output, fit)) {
 				snprintf(message, message_size,
 					"too many output overrides");
@@ -940,7 +931,7 @@ static uint8_t handle_reload(
 	}
 
 	mark_all_repaint(daemon);
-	reconcile_paint(daemon);
+	sweetbg_daemon_repaint(daemon);
 	snprintf(message, message_size, "reloaded config");
 	return SWEETBG_STATUS_OK;
 }
@@ -999,9 +990,9 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 				req.output);
 			return SWEETBG_STATUS_ERR_BAD_REQUEST;
 		}
-		const char *old_path = effective_path(daemon, output);
+		const char *old_path = sweetbg_daemon_path(daemon, output);
 		bool had_image = old_path[0] != '\0';
-		enum sweetbg_fit old_fit = effective_fit(daemon, output);
+		enum sweetbg_fit old_fit = sweetbg_daemon_fit(daemon, output);
 		bool image_changed = false;
 		bool fit_changed = false;
 
@@ -1020,11 +1011,11 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 		if ((req.flags & SWEETBG_CLEAR_FIT) != 0) {
 			fit_changed =
 				clear_fit_assignment(daemon, req.output) &&
-				old_fit != effective_fit(daemon, output);
+				old_fit != sweetbg_daemon_fit(daemon, output);
 		}
 		if (image_changed) {
 			output->surface.needs_repaint = true;
-			reconcile_paint(daemon);
+			sweetbg_daemon_repaint(daemon);
 		} else if (fit_changed) {
 			repaint_output_after_fit(daemon, output, old_fit);
 		}
@@ -1051,7 +1042,7 @@ static uint8_t handle_clear(struct daemon *daemon, const uint8_t *payload,
 	}
 	if (image_changed) {
 		mark_all_repaint(daemon);
-		reconcile_paint(daemon);
+		sweetbg_daemon_repaint(daemon);
 	} else if (fit_changed) {
 		repaint_after_change(daemon, false, true);
 	}
@@ -1113,7 +1104,10 @@ static bool report_wayland_disconnect(struct wl_display *display) {
 static bool run_loop(
 	struct daemon *daemon, struct sweetbg_ipc_server *ipc, int signal_fd) {
 	struct wl_display *display = daemon->display;
-	struct pollfd fds[3];
+	struct pollfd fds[3 + SWEETBG_FOLLOW_CLIENTS];
+	struct sweetbg_follow follow;
+	sweetbg_daemon_follow_init(&follow, daemon);
+	ipc->follow = &follow;
 	fds[0].fd = wl_display_get_fd(display);
 	fds[0].events = POLLIN;
 	fds[1].fd = ipc->fd;
@@ -1122,42 +1116,53 @@ static bool run_loop(
 	fds[2].events = POLLIN;
 
 	bool running = true;
+	bool ok = true;
 	while (running) {
 		while (wl_display_prepare_read(display) != 0) {
 			if (wl_display_dispatch_pending(display) < 0) {
-				return report_wayland_disconnect(display);
+				ok = report_wayland_disconnect(display);
+				goto done;
 			}
 		}
+		ensure_surfaces(daemon->reg);
+		sweetbg_daemon_follow_reconcile(daemon, &follow);
+		collect_buffers(daemon->reg);
+		sweetbg_follow_poll(&follow, fds + 3);
 		wl_display_flush(display);
 
-		if (poll(fds, 3, -1) < 0) {
+		if (poll(fds, 3 + SWEETBG_FOLLOW_CLIENTS, -1) < 0) {
 			wl_display_cancel_read(display);
 			if (errno == EINTR) {
 				continue;
 			}
 			fprintf(stderr, "sweetbgd: poll failed: %s\n",
 				strerror(errno));
-			return false;
+			ok = false;
+			goto done;
 		}
 
 		if ((fds[0].revents & POLLIN) != 0) {
 			if (wl_display_read_events(display) < 0) {
-				return report_wayland_disconnect(display);
+				ok = report_wayland_disconnect(display);
+				goto done;
 			}
 		} else {
 			wl_display_cancel_read(display);
 		}
 		if (wl_display_dispatch_pending(display) < 0) {
-			return report_wayland_disconnect(display);
+			ok = report_wayland_disconnect(display);
+			goto done;
 		}
 		short bad = POLLERR | POLLHUP | POLLNVAL;
 		if ((fds[0].revents & bad) != 0) {
-			return report_wayland_disconnect(display);
+			ok = report_wayland_disconnect(display);
+			goto done;
 		}
 		if ((fds[1].revents & bad) != 0) {
 			fprintf(stderr,
 				"sweetbgd: control socket poll failure\n");
-			return false;
+			ok = false;
+			goto done;
 		}
 
 		if ((fds[2].revents & POLLIN) != 0) {
@@ -1165,13 +1170,15 @@ static bool run_loop(
 		}
 		if ((fds[2].revents & bad) != 0) {
 			fprintf(stderr, "sweetbgd: signal fd poll failure\n");
-			return false;
+			ok = false;
+			goto done;
 		}
 
 		ensure_surfaces(daemon->reg);
-		reconcile_paint(daemon);
+		sweetbg_daemon_repaint(daemon);
 		collect_buffers(daemon->reg);
 
+		sweetbg_follow_dispatch(&follow, fds + 3);
 		if ((fds[1].revents & POLLIN) != 0) {
 			bool stop = false;
 			sweetbg_ipc_server_handle(ipc, dispatch, daemon, &stop);
@@ -1180,7 +1187,10 @@ static bool run_loop(
 			}
 		}
 	}
-	return true;
+done:
+	sweetbg_follow_finish(&follow);
+	ipc->follow = NULL;
+	return ok;
 }
 
 static void report_outputs(struct sweetbg_registry *reg) {
@@ -1309,7 +1319,7 @@ static bool serve(struct wl_display *display, struct sweetbg_ipc_server *ipc,
 	load_config(&daemon, false, err, sizeof(err));
 
 	// The initial configures flagged each surface; paint config image/color
-	reconcile_paint(&daemon);
+	sweetbg_daemon_repaint(&daemon);
 	if (wl_display_roundtrip(display) < 0) {
 		daemon_free_paths(&daemon);
 		sweetbg_registry_finish(&reg);

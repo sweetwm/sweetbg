@@ -49,8 +49,8 @@ static bool buffer_size(uint32_t width, uint32_t height, uint32_t *stride_out,
 	return true;
 }
 
-bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
-	uint32_t width, uint32_t height) {
+static bool create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
+	uint32_t width, uint32_t height, uint32_t format) {
 	*buffer = (struct sweetbg_buffer){.width = width, .height = height};
 
 	uint32_t stride;
@@ -83,7 +83,7 @@ bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 	}
 
 	buffer->wl_buffer = wl_shm_pool_create_buffer(pool, 0, (int32_t)width,
-		(int32_t)height, (int32_t)stride, WL_SHM_FORMAT_XRGB8888);
+		(int32_t)height, (int32_t)stride, format);
 
 	wl_shm_pool_destroy(pool);
 	close(fd);
@@ -99,6 +99,39 @@ bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 	return true;
 }
 
+bool sweetbg_buffer_create(struct sweetbg_buffer *buffer, struct wl_shm *shm,
+	uint32_t width, uint32_t height) {
+	return create(buffer, shm, width, height, WL_SHM_FORMAT_XRGB8888);
+}
+
+bool sweetbg_buffer_transparent(
+	struct sweetbg_buffer *buffer, struct wl_shm *shm) {
+	if (!create(buffer, shm, 1, 1, WL_SHM_FORMAT_ARGB8888)) {
+		return false;
+	}
+	sweetbg_buffer_fill(buffer, 0);
+	sweetbg_buffer_unmap(buffer);
+	return true;
+}
+
+bool sweetbg_buffer_validate_fd(int fd, uint32_t width, uint32_t height) {
+	uint32_t stride;
+	size_t size;
+	if (!buffer_size(width, height, &stride, &size)) {
+		return false;
+	}
+	struct stat info;
+	if (fstat(fd, &info) != 0 || info.st_size < 0 ||
+		!S_ISREG(info.st_mode) || (size_t)info.st_size < size) {
+		return false;
+	}
+	int seals = fcntl(fd, F_GET_SEALS);
+	if (seals < 0 || (seals & F_SEAL_SHRINK) == 0) {
+		return false;
+	}
+	return true;
+}
+
 bool sweetbg_buffer_from_fd(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 	int fd, uint32_t width, uint32_t height) {
 	*buffer = (struct sweetbg_buffer){.width = width, .height = height};
@@ -109,13 +142,7 @@ bool sweetbg_buffer_from_fd(struct sweetbg_buffer *buffer, struct wl_shm *shm,
 		return false;
 	}
 
-	struct stat info;
-	if (fstat(fd, &info) != 0 || info.st_size < 0 ||
-		!S_ISREG(info.st_mode) || (size_t)info.st_size < size) {
-		return false;
-	}
-	int seals = fcntl(fd, F_GET_SEALS);
-	if (seals < 0 || (seals & F_SEAL_SHRINK) == 0) {
+	if (!sweetbg_buffer_validate_fd(fd, width, height)) {
 		return false;
 	}
 

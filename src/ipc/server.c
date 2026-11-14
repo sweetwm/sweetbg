@@ -8,6 +8,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include "ipc/follow.h"
 #include "ipc/protocol.h"
 
 #define CLIENT_REQUEST_TIMEOUT_MS 1000
@@ -66,6 +67,7 @@ static bool clear_existing_socket(const struct sockaddr_un *addr) {
 
 bool sweetbg_ipc_server_init(struct sweetbg_ipc_server *server) {
 	server->fd = -1;
+	server->follow = NULL;
 	server->path[0] = '\0';
 
 	struct sockaddr_un addr;
@@ -96,7 +98,8 @@ bool sweetbg_ipc_server_init(struct sweetbg_ipc_server *server) {
 		return false;
 	}
 
-	if (chmod(addr.sun_path, S_IRUSR | S_IWUSR) < 0 || listen(fd, 4) < 0) {
+	// The permission event announces a listening socket to subscribers.
+	if (listen(fd, 4) < 0 || chmod(addr.sun_path, S_IRUSR | S_IWUSR) < 0) {
 		fprintf(stderr, "sweetbgd: cannot listen on %s: %s\n",
 			addr.sun_path, strerror(errno));
 		close(fd);
@@ -125,6 +128,11 @@ void sweetbg_ipc_server_handle(struct sweetbg_ipc_server *server,
 	int fd = -1;
 	if (sweetbg_ipc_recv_frame(client, &type, payload, &len,
 		    sizeof(payload), &fd, CLIENT_REQUEST_TIMEOUT_MS)) {
+		if (type == SWEETBG_FOLLOW_SUBSCRIBE && len == 0 && fd < 0 &&
+			server->follow != NULL &&
+			sweetbg_follow_accept(server->follow, client)) {
+			return;
+		}
 		// Sized for a multi-output query response, capped by the frame
 		char message[SWEETBG_IPC_MAX_PAYLOAD] = {0};
 		uint8_t status = dispatch(data, type, payload, len, fd, message,

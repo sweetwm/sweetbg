@@ -85,6 +85,8 @@ executable(
 	'src/wayland/surface.c',
 	'src/wayland/shm.c',
 	'src/ipc/server.c',
+	'src/ipc/follow.c',
+	'src/daemon/follow.c',
 	'src/config/config.c',
 	'src/query/json.c',
 	include_directories: sweetbg_inc,

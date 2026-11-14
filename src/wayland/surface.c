@@ -182,6 +182,22 @@ static void present(struct sweetbg_surface *surface, int32_t scale,
 	surface->has_content = true;
 }
 
+bool sweetbg_surface_transparent(
+	struct sweetbg_surface *surface, struct wl_shm *shm) {
+	if (!surface->configured || surface->viewport == NULL) {
+		return false;
+	}
+	struct sweetbg_buffer *buffer = calloc(1, sizeof(*buffer));
+	if (buffer == NULL || !sweetbg_buffer_transparent(buffer, shm)) {
+		free(buffer);
+		return false;
+	}
+	retire_buffer(surface);
+	surface->buffer = buffer;
+	present(surface, 1, 1, 1);
+	return true;
+}
+
 bool sweetbg_surface_paint_color(struct sweetbg_surface *surface,
 	struct wl_shm *shm,
 	struct wp_single_pixel_buffer_manager_v1 *single_pixel_manager,
